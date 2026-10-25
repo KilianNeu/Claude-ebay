@@ -88,7 +88,31 @@
     "system",
     "tower",
     "mainboard",
-    "cpu"
+    "cpu",
+    "nur lüfter",
+    "nur kühler",
+    "nur der kühler",
+    "ohne gpu",
+    "ohne chip",
+    "ohne grafikchip",
+    "pcb",
+    "platine",
+    "shroud",
+    "nur gehäuse"
+  ],
+  "excludeParts": [
+    "kühlkörper",
+    "kuehlkoerper",
+    "kühlblock",
+    "heatsink",
+    "lüfter+",
+    "lüfter &",
+    "lüfterabdeckung",
+    "lüftereinheit",
+    "wasserkühl",
+    "waterblock",
+    "ersatzlüfter",
+    "ersatzkühler"
   ],
   "searches": [
     {

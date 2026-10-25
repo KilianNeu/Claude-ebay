@@ -91,10 +91,12 @@ function totalPrice(item) {
   return base + (Number.isFinite(ship) ? ship : 0);
 }
 
-// Ausschlusswörter als ganze Wörter prüfen, damit "ti" nicht in "Edition" greift.
+// Ausschlusswörter als ganze Wörter prüfen, damit "ti" nicht in "Edition" greift. Wortteile
+// (excludeParts) greifen überall, auch in Zusammensetzungen wie "Lüfter+Kühlkörper".
 function excluded(title, terms) {
   const t = title.toLowerCase();
-  return terms.some((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
+  return (config.excludeParts ?? []).some((part) => t.includes(part))
+    || terms.some((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
 }
 
 function quantile(values, q) {

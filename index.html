@@ -86,6 +86,7 @@
   .tile .k { font-size: 12px; color: var(--muted); }
   .tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .tile .s { font-size: 12px; color: var(--muted); }
+  .tile a { color: var(--accent); }
   .chartbox { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; position: relative; }
   .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
   .legend svg { vertical-align: -2px; margin-right: 4px; }
@@ -425,9 +426,11 @@ function drawChart(m) {
   const line = m.series.filter((p) => p[1] != null);
   const dots = m.sales.filter((x) => x.t >= (line[0]?.[0] ?? 0) - 7 * 864e5);
   if (line.length + dots.length < 2) {
-    const t = svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle" });
-    t.textContent = "Noch zu wenig Daten – der Verlauf entsteht mit jedem stündlichen Lauf.";
-    svg.append(t); return;
+    for (const [i, line] of ["Noch zu wenig Daten.", "Der Verlauf wächst mit jedem stündlichen Lauf."].entries()) {
+      const t = svgEl("text", { x: W / 2, y: H / 2 + i * 18, "text-anchor": "middle" });
+      t.textContent = line; svg.append(t);
+    }
+    return;
   }
   const ts = [...line.map((p) => p[0]), ...dots.map((d) => d.t)];
   const vs = [...line.map((p) => p[1]), ...dots.map((d) => d.price)];
