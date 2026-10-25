@@ -45,7 +45,7 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
 - `floorRatio: 0.4` – alles unter 40 % gilt als Zubehör/Fake und wird ignoriert
 - `exclude` – Wörter, die nie im Titel vorkommen dürfen (ganze Wörter)
 - `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
-- `condition: "USED"` – nur gebrauchte Karten (Referenz und Treffer)
+- `conditionIds` – nur gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist ausgeschlossen
 
 ## Lokal testen
 

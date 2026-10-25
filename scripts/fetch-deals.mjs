@@ -198,9 +198,11 @@ const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
-  const keep = (items) => items.filter((i) => !excluded(i.title ?? "", terms));
+  // Defekte Karten doppelt ausschließen: per Zustandsfilter in der Suche und hier per Zustand 7000
+  // ("Als Ersatzteil / defekt") sowie per Ausschlusswörtern im Titel.
+  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && !excluded(i.title ?? "", terms));
   const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
-    + (config.condition ? `,conditions:{${config.condition}}` : "");
+    + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "");
 
   // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
   // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
@@ -250,6 +252,13 @@ async function dealsFor(token, s) {
   }
 
   remember(cheapest, s);
+
+  // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze).
+  const bin = [...refItems, ...cheapest]
+    .map((i) => ({ price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title }))
+    .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
+    .sort((a, b) => a.price - b.price)[0];
+  if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title };
   console.log(`  ${s.label}: Angebote ${round(askMedian)} € (${refItems.length}), verkauft ${round(soldMedian) ?? "–"} € (${soldCount}), ${deals.length} Treffer`);
   return { deals, market };
 }
