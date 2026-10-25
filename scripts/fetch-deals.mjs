@@ -208,7 +208,9 @@ async function dealsFor(token, s) {
 
   const askMedian = median(refItems.map(totalPrice));
   if (Number.isFinite(askMedian)) {
-    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(Math.min(...refItems.map(totalPrice)))]);
+    // Günstigstes Angebot ohne Ausreißer (Zubehör, Fakes) unterhalb der Preisuntergrenze.
+    const plausible = refItems.map(totalPrice).filter((v) => v >= askMedian * (config.floorRatio ?? 0));
+    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(Math.min(...plausible))]);
   }
   const { soldMedian, soldCount } = soldStats(s.label);
   const useSold = soldCount >= MIN_SOLD;
