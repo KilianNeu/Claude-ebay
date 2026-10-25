@@ -28,6 +28,7 @@ const statsFile = new URL("../data/stats.json", import.meta.url);
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
 history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot, 25-%-Quantil], ...]
 history.cheapest ??= {};  // Modell -> [{ id, title, url, isNew, price, from, to }, ...]
+history.ended ??= [];     // beendete Auktionen: { id, model, title, url, price, bids, at, result }
 // Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
 // (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
 const HISTORY_VERSION = 2;
@@ -189,6 +190,15 @@ function recordSale(id, l, kind, price = l.price) {
 }
 
 // Endpreis einer beendeten Auktion abfragen. Nur echte Endpreise zählen als Verkauf.
+// Jede beendete Auktion für die Liste in der Preisstatistik festhalten, verkauft oder nicht.
+function recordEnded(id, l, result, price, bids, item) {
+  history.ended.push({
+    id, model: l.model, title: item?.title ?? l.title ?? null,
+    url: item?.itemWebUrl ?? `https://www.ebay.de/itm/${String(id).split("|")[1] ?? id}`,
+    price, bids, at: l.endsAt ? Date.parse(l.endsAt) : now, result,
+  });
+}
+
 async function settleAuction(token, id, l) {
   auctionChecksLeft--;
   const r = await getItem(token, id).catch(() => null);
@@ -197,6 +207,7 @@ async function settleAuction(token, id, l) {
     stats.auctionUnavailable++;
     l.done = true;
     l.lastBidOnly = true; // Endpreis unbekannt, nur letztes gesehenes Gebot vorhanden
+    recordEnded(id, l, "unknown", l.price, l.bids, null);
     return;
   }
   const item = r.item;
@@ -210,13 +221,16 @@ async function settleAuction(token, id, l) {
   const reserveMissed = item.reservePriceMet === false;
   const ship = num(item.shippingOptions?.[0]?.shippingCost);
   const final = num(item.currentBidPrice ?? item.price) + (Number.isFinite(ship) ? ship : 0);
-  if (bids > 0 && !reserveMissed && Number.isFinite(final)) {
-    recordSale(id, l, "auction", Math.round(final * 100) / 100);
+  const price = Number.isFinite(final) ? Math.round(final * 100) / 100 : null;
+  if (bids > 0 && !reserveMissed && price != null) {
+    recordSale(id, l, "auction", price);
     l.bids = bids;
     stats.auctionFinal++;
+    recordEnded(id, l, "sold", price, bids, item);
   } else {
     stats.auctionUnsold++;
     l.done = true;
+    recordEnded(id, l, reserveMissed ? "reserve" : "nobids", price, bids, item);
   }
 }
 
@@ -350,6 +364,7 @@ function prune() {
   }
   const ids = new Set();
   history.sold = history.sold.filter((x) => x.at > now - 90 * DAY && !ids.has(x.id) && ids.add(x.id));
+  history.ended = history.ended.filter((x) => x.at > now - 90 * DAY);
   for (const label of Object.keys(history.cheapest)) {
     history.cheapest[label] = history.cheapest[label].filter((x) => x.to > now - 90 * DAY);
   }
@@ -379,9 +394,13 @@ function buildStats() {
     const recent = sales.filter((x) => x.t > now - SOLD_WINDOW).map((x) => x.price);
     const q = (p) => round(quantile(recent, p));
     const cheapestLog = (history.cheapest[s.label] ?? []).slice(-20).reverse();
+    const ended = history.ended.filter((x) => x.model === s.label).sort((a, b) => b.at - a.at).slice(0, 40);
+    const ended30 = history.ended.filter((x) => x.model === s.label && x.at > now - SOLD_WINDOW);
     return {
       label: s.label,
       cheapestLog,
+      ended,
+      auctions: { ended: ended30.length, sold: ended30.filter((x) => x.result === "sold").length },
       sold: { n: recent.length, min: q(0), p25: q(0.25), median: q(0.5), p75: q(0.75), max: q(1) },
       series,
       sales,
