@@ -42,6 +42,9 @@
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     overflow: hidden; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
   .card:hover { border-color: var(--accent); }
+  .cardlink { display: flex; flex-direction: column; flex: 1; color: inherit; text-decoration: none; }
+  .card .mkwrap { padding: 0 12px 12px; }
+  .mkrow a { color: var(--accent); font-weight: 600; white-space: nowrap; }
   .thumb { aspect-ratio: 4/3; background: #fff center/contain no-repeat; position: relative; }
   .badge { position: absolute; top: 8px; left: 8px; background: var(--good); color: #fff; font-weight: 700;
     font-size: 13px; padding: 2px 8px; border-radius: 6px; }
@@ -291,14 +294,17 @@ function renderGrid() {
       d.condition ? el("span", { class: "tag" }, d.condition) : null,
       d.location ? el("span", { class: "tag" }, d.location === "DE" ? "aus Deutschland" : d.location) : null,
       d.seller?.score != null ? el("span", { class: "tag" }, `Verkäufer: ${d.seller.score} Bew.${d.seller.positive ? ` · ${String(d.seller.positive).replace(".", ",")} %` : ""}`) : null);
-    grid.append(el("a", { class: "card", href: d.url, target: "_blank", rel: "noopener" },
-      thumb,
-      el("div", { class: "body" },
-        el("div", { class: "title" }, d.title),
-        meta,
-        el("div", { class: "price" }, eur.format(d.total)),
-        el("div", { class: "ref" }, d.reference ? `inkl. Versand · Marktpreis ca. ${eur.format(d.reference)} (${d.basis === "sold" ? "verkauft" : `günstigstes Viertel ${d.isNew ? "neu" : "gebraucht"}`})` : "inkl. Versand"),
-        marketBlock(d))));
+    // Bild und Titel verlinken auf das Angebot; die Marktdaten darunter haben eigene Links
+    // (verschachtelte Links sind in HTML nicht erlaubt).
+    grid.append(el("article", { class: "card" },
+      el("a", { class: "cardlink", href: d.url, target: "_blank", rel: "noopener" },
+        thumb,
+        el("div", { class: "body" },
+          el("div", { class: "title" }, d.title),
+          meta,
+          el("div", { class: "price" }, eur.format(d.total)),
+          el("div", { class: "ref" }, d.reference ? `inkl. Versand · Marktpreis ca. ${eur.format(d.reference)} (${d.basis === "sold" ? "verkauft" : `günstigstes Viertel ${d.isNew ? "neu" : "gebraucht"}`})` : "inkl. Versand"))),
+      el("div", { class: "mkwrap" }, marketBlock(d))));
   }
 }
 
@@ -315,8 +321,10 @@ function marketBlock(d) {
     el("b", {}, `Ø ${euro0(m.soldAvg)} (${euro0(m.soldMin)}–${euro0(m.soldMax)})`)));
   rows.push(el("div", { class: "mkrow" }, el("span", {}, `Angebote (${m.askCount}×)`),
     el("b", {}, m.askMin != null ? `Ø ${euro0(m.askAvg)} (${euro0(m.askMin)}–${euro0(m.askMax)})` : "–")));
-  if (m.cheapestBin) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Günstigster Sofortkauf"),
-    el("b", {}, m.cheapestBin.url === d.url ? `${euro0(m.cheapestBin.price)} (dieses)` : euro0(m.cheapestBin.price))));
+  if (m.cheapestBin) rows.push(el("div", { class: "mkrow" }, el("span", {}, `Günstigster Sofortkauf${m.cheapestBin.isNew ? " (neu)" : ""}`),
+    m.cheapestBin.url === d.url
+      ? el("b", {}, `${euro0(m.cheapestBin.price)} (dieses)`)
+      : el("a", { href: m.cheapestBin.url, target: "_blank", rel: "noopener", title: m.cheapestBin.title }, `${euro0(m.cheapestBin.price)} ansehen ›`)));
   if (m.usedCount && m.newCount) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Angebote gebraucht / neu"),
     el("b", {}, `${m.usedMedian != null ? euro0(m.usedMedian) : "–"} (${m.usedCount}×) / ${euro0(m.newMedian)} (${m.newCount}×)`)));
   rows.push(el("div", { class: "mkrow" }, el("span", {}, "Median verkauft / angeboten"),
