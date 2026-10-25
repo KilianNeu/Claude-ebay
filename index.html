@@ -285,6 +285,7 @@ function renderGrid() {
         d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
       d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
       d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
+      d.alsoBuyItNow ? el("span", { class: "tag" }, "auch Sofort-Kaufen") : null,
       d.condition ? el("span", { class: "tag" }, d.condition) : null,
       d.location ? el("span", { class: "tag" }, d.location === "DE" ? "aus Deutschland" : d.location) : null);
     grid.append(el("a", { class: "card", href: d.url, target: "_blank", rel: "noopener" },

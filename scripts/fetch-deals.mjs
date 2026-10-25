@@ -134,6 +134,7 @@ function toDeal(item, s, reference) {
     condition: item.condition ?? null,
     auction,
     bestOffer: item.buyingOptions?.includes("BEST_OFFER") ?? false,
+    alsoBuyItNow: auction && (item.buyingOptions?.includes("FIXED_PRICE") ?? false),
     bids: auction ? item.bidCount ?? 0 : null,
     endsAt: item.itemEndDate ?? null,
     total: Math.round(total * 100) / 100,
@@ -236,13 +237,16 @@ async function dealsFor(token, s) {
   const model = modelPattern(s);
   const keep = (items) => items.filter((i) => i.conditionId !== "7000" && domestic(i)
     && model.test((i.title ?? "").toLowerCase()) && !excluded(i.title ?? "", terms));
+  // Auktionen mit Sofort-Kaufen-Option kommen auch bei buyingOptions:{FIXED_PRICE}, ihr Preis ist aber
+  // das Gebot, nicht der Sofort-Kaufen-Preis. Für Angebotspreise daher nur reine Sofortkäufe.
+  const binOnly = (items) => items.filter((i) => !i.buyingOptions?.includes("AUCTION"));
   const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
     + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "");
 
   // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
   // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
   const [refItems, ending] = await Promise.all([
-    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }).then(keep),
+    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }).then(keep).then(binOnly),
     search(token, { q: s.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
   ]);
   remember([...refItems, ...ending], s);
@@ -274,9 +278,9 @@ async function dealsFor(token, s) {
   if (Number.isFinite(reference)) {
     const floor = reference * (config.floorRatio ?? 0);
     const cap = s.maxPrice ?? reference * config.dealThreshold;
-    cheapest = keep(await search(token, {
+    cheapest = binOnly(keep(await search(token, {
       q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "30",
-    }));
+    })));
     const seen = new Set();
     deals = [...cheapest, ...ending]
       .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
