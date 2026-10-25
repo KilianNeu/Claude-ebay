@@ -3,8 +3,9 @@
 // Ohne Keys wird eine leere Datei mit Hinweis geschrieben, damit die Seite trotzdem baut.
 //
 // Verkaufspreise liefert die öffentliche API nicht. Deshalb führt das Skript eine eigene
-// Historie (HISTORY_FILE): Auktionen werden bis kurz vor Ende beobachtet, verschwundene
-// Sofort-Kaufen-Angebote per getItem geprüft. Daraus entsteht ein geschätzter Verkaufspreis.
+// Historie (HISTORY_FILE): Beendete Auktionen werden per getItem nach ihrem Endpreis gefragt,
+// verschwundene Sofort-Kaufen-Angebote ebenso geprüft. Daraus entsteht ein geschätzter Verkaufspreis.
+// Das zuletzt gesehene Gebot zählt nicht, weil Auktionen in den letzten Minuten stark steigen.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 
@@ -16,12 +17,13 @@ const historyFile = process.env.HISTORY_FILE ?? new URL("../data/history.json", 
 const HOUR = 3.6e6, DAY = 24 * HOUR;
 const SOLD_WINDOW = 30 * DAY;     // Verkäufe der letzten 30 Tage zählen
 const MIN_SOLD = 5;               // ab so vielen Verkäufen ersetzt der Verkaufspreis den Angebotspreis
-const AUCTION_GRACE = 3 * HOUR;   // letzte Beobachtung höchstens so lange vor Auktionsende
-const MAX_CHECKS = 40;            // getItem-Prüfungen pro Lauf
+const MAX_CHECKS = 20;            // getItem-Prüfungen verschwundener Sofort-Kaufen-Angebote pro Lauf
+const MAX_AUCTION_CHECKS = 60;    // getItem-Abfragen beendeter Auktionen pro Lauf
 const now = Date.now();
 
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
-let checksLeft = MAX_CHECKS;
+let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS;
+const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 
 async function getToken(id, secret) {
   const res = await fetch(`${API}/identity/v1/oauth2/token`, {
@@ -50,14 +52,21 @@ async function search(token, params) {
   return (await res.json()).itemSummaries ?? [];
 }
 
+// { gone: true } = nicht mehr abrufbar, { item } = Angebotsdaten, null = Fehler.
+async function getItem(token, itemId) {
+  const res = await fetch(`${API}/buy/browse/v1/item/${encodeURIComponent(itemId)}`, { headers: headers(token) });
+  if (res.status === 404 || res.status === 410) return { gone: true };
+  if (!res.ok) return null;
+  return { item: await res.json() };
+}
+
 // true = Angebot beendet (verkauft oder zurückgezogen), false = noch aktiv, null = unklar.
 async function hasEnded(token, itemId) {
-  const res = await fetch(`${API}/buy/browse/v1/item/${encodeURIComponent(itemId)}`, { headers: headers(token) });
-  if (res.status === 404 || res.status === 410) return true;
-  if (!res.ok) return null;
-  const item = await res.json();
-  const status = item.estimatedAvailabilities?.[0]?.estimatedAvailabilityStatus;
-  return (item.itemEndDate && new Date(item.itemEndDate) < now) || status === "OUT_OF_STOCK";
+  const r = await getItem(token, itemId);
+  if (!r) return null;
+  if (r.gone) return true;
+  const status = r.item.estimatedAvailabilities?.[0]?.estimatedAvailabilityStatus;
+  return (r.item.itemEndDate && new Date(r.item.itemEndDate) < now) || status === "OUT_OF_STOCK";
 }
 
 const num = (p) => (p ? Number(p.value) : NaN);
@@ -122,9 +131,35 @@ function remember(items, s) {
   }
 }
 
-function recordSale(id, l, kind) {
-  history.sold.push({ id, model: l.model, price: l.price, at: Math.min(now, l.endsAt ? Date.parse(l.endsAt) : now), kind });
+function recordSale(id, l, kind, price = l.price) {
+  history.sold.push({ id, model: l.model, price, at: Math.min(now, l.endsAt ? Date.parse(l.endsAt) : now), kind });
   l.done = true;
+}
+
+// Endpreis einer beendeten Auktion abfragen. Nur echte Endpreise zählen als Verkauf.
+async function settleAuction(token, id, l) {
+  auctionChecksLeft--;
+  const r = await getItem(token, id).catch(() => null);
+  if (!r) return; // später erneut versuchen
+  if (r.gone) {
+    stats.auctionUnavailable++;
+    l.done = true;
+    l.lastBidOnly = true; // Endpreis unbekannt, nur letztes gesehenes Gebot vorhanden
+    return;
+  }
+  const item = r.item;
+  const bids = item.bidCount ?? 0;
+  const reserveMissed = item.reservePriceMet === false;
+  const ship = num(item.shippingOptions?.[0]?.shippingCost);
+  const final = num(item.currentBidPrice ?? item.price) + (Number.isFinite(ship) ? ship : 0);
+  if (bids > 0 && !reserveMissed && Number.isFinite(final)) {
+    recordSale(id, l, "auction", Math.round(final * 100) / 100);
+    l.bids = bids;
+    stats.auctionFinal++;
+  } else {
+    stats.auctionUnsold++;
+    l.done = true;
+  }
 }
 
 // Beendete Auktionen und verschwundene Sofort-Kaufen-Angebote als Verkauf erfassen.
@@ -133,14 +168,12 @@ async function settle(token, s, seenIds) {
     if (l.model !== s.label || l.done || seenIds.has(id)) continue;
     if (l.auction) {
       const end = l.endsAt ? Date.parse(l.endsAt) : NaN;
-      if (!(end < now)) continue;
-      // Ohne Gebote oder zu frühe letzte Beobachtung: Endpreis unbekannt.
-      if (l.bids > 0 && l.lastSeen >= end - AUCTION_GRACE) recordSale(id, l, "auction");
-      else l.done = true;
+      // Ein paar Minuten Puffer, bis eBay die Auktion abgeschlossen hat.
+      if (end < now - 5 * 60e3 && auctionChecksLeft > 0) await settleAuction(token, id, l);
     } else if (l.lastSeen < now - HOUR / 2 && checksLeft > 0) {
       checksLeft--;
       const ended = await hasEnded(token, id).catch(() => null);
-      if (ended === true) recordSale(id, l, "vanished");
+      if (ended === true) { recordSale(id, l, "vanished"); stats.vanishedSold++; }
       else if (ended === false) l.done = true; // nur aus der Trefferliste gerutscht
     }
   }
@@ -222,6 +255,9 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     }
   }
   prune();
+  console.log(`Auktionen: ${stats.auctionFinal} mit Endpreis, ${stats.auctionUnsold} ohne Verkauf, `
+    + `${stats.auctionUnavailable} nicht mehr abrufbar. Sofort-Kaufen: ${stats.vanishedSold} vermutlich verkauft.`);
+  result.stats = stats;
 }
 
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
