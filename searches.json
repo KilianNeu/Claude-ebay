@@ -1,18 +1,127 @@
 {
   "marketplace": "EBAY_DE",
   "currency": "EUR",
-  "maxItemsPerSearch": 12,
-  "dealThreshold": 0.65,
+  "categoryIds": "27386",
+  "maxItemsPerSearch": 10,
+  "dealThreshold": 0.85,
+  "floorRatio": 0.4,
+  "exclude": [
+    "defekt",
+    "bastler",
+    "ohne funktion",
+    "artefakte",
+    "kein bild",
+    "for parts",
+    "kühler",
+    "kuehler",
+    "backplate",
+    "halterung",
+    "wasserkühler",
+    "wakü",
+    "leerkarton",
+    "ovp leer",
+    "nur ovp",
+    "laptop",
+    "notebook",
+    "gaming pc",
+    "komplett pc",
+    "komplettsystem",
+    "rechner",
+    "suche",
+    "tausche",
+    "tausch",
+    "riser"
+  ],
   "searches": [
-    { "label": "LEGO Konvolut",          "query": "lego konvolut",            "maxPrice": 40,  "note": "Sortieren, Sets komplettieren, Minifiguren einzeln verkaufen" },
-    { "label": "LEGO Minifiguren",       "query": "lego minifiguren sammlung", "maxPrice": 30,  "note": "Seltene Figuren einzeln oft deutlich teurer" },
-    { "label": "Nintendo DS / 3DS Spiele","query": "nintendo ds spiele konvolut","maxPrice": 35, "note": "Einzelspiele gehen gut, Pokémon-Titel besonders" },
-    { "label": "Game Boy",               "query": "game boy",                 "maxPrice": 40,  "note": "Retro-Konsolen steigen seit Jahren" },
-    { "label": "iPhone defekt",          "query": "iphone defekt",            "maxPrice": 80,  "note": "Nur mit Reparatur-Know-how; Ersatzteile einrechnen" },
-    { "label": "Makita / Bosch Akku-Werkzeug", "query": "makita akkuschrauber", "maxPrice": 50, "note": "Gebrauchtes Profi-Werkzeug ist sehr wertstabil" },
-    { "label": "Kamera-Objektive",       "query": "canon objektiv ef",        "maxPrice": 60,  "note": "Auf Pilz/Kratzer achten, Linsen sind wertstabil" },
-    { "label": "ThinkPad",               "query": "lenovo thinkpad",          "maxPrice": 120, "note": "Business-Laptops: günstig aus Leasingrückläufern" },
-    { "label": "Playmobil Konvolut",     "query": "playmobil konvolut",       "maxPrice": 30,  "note": "Sets sortieren und einzeln verkaufen" },
-    { "label": "Dyson defekt",           "query": "dyson defekt",             "maxPrice": 60,  "note": "Oft nur Akku oder Filter kaputt" }
+    {
+      "label": "RTX 3060 12GB",
+      "query": "rtx 3060 12gb",
+      "exclude": [
+        "ti",
+        "3060ti"
+      ],
+      "note": "Viel VRAM für wenig Geld, sehr gefragt"
+    },
+    {
+      "label": "RTX 3060 Ti",
+      "query": "rtx 3060 ti",
+      "note": "Solide 1440p-Karte, viele Angebote"
+    },
+    {
+      "label": "RTX 3070",
+      "query": "rtx 3070",
+      "exclude": [
+        "ti",
+        "laptop",
+        "3070ti"
+      ],
+      "note": "Großer Markt, Preise gut vergleichbar"
+    },
+    {
+      "label": "RTX 3080",
+      "query": "rtx 3080",
+      "exclude": [
+        "ti",
+        "3080ti"
+      ],
+      "note": "Oft aus Mining – Zustand prüfen"
+    },
+    {
+      "label": "RTX 3090",
+      "query": "rtx 3090",
+      "exclude": [
+        "ti",
+        "3090ti"
+      ],
+      "note": "24 GB VRAM, gefragt für KI-Anwendungen"
+    },
+    {
+      "label": "RTX 4060 Ti",
+      "query": "rtx 4060 ti",
+      "note": "Sparsam, beliebt bei Einsteigern"
+    },
+    {
+      "label": "RTX 4070",
+      "query": "rtx 4070",
+      "exclude": [
+        "ti",
+        "super",
+        "4070ti",
+        "4070s"
+      ],
+      "note": "Sehr gefragt, schnell wieder verkauft"
+    },
+    {
+      "label": "RTX 4070 Super",
+      "query": "rtx 4070 super",
+      "exclude": [
+        "ti",
+        "4070ti"
+      ],
+      "note": "Preis-Leistungs-Tipp der 40er-Serie"
+    },
+    {
+      "label": "RTX 4080",
+      "query": "rtx 4080",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "Hoher Preis, also auch hohe absolute Spanne"
+    },
+    {
+      "label": "RX 6700 XT",
+      "query": "rx 6700 xt",
+      "note": "12 GB, günstiger als Nvidia"
+    },
+    {
+      "label": "RX 6800 XT",
+      "query": "rx 6800 xt",
+      "note": "Stark für den Preis"
+    },
+    {
+      "label": "RX 7800 XT",
+      "query": "rx 7800 xt",
+      "note": "Aktuelle AMD-Mittelklasse"
+    }
   ]
 }

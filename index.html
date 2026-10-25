@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eBay Schnäppchen</title>
-<meta name="description" content="Günstige eBay-Angebote mit Wiederverkaufspotenzial – automatisch aktualisiert.">
+<title>Grafikkarten-Schnäppchen</title>
+<meta name="description" content="Gebrauchte Grafikkarten bei eBay unter Marktpreis – automatisch aktualisiert.">
 <style>
   :root {
     --bg: #f6f7f9; --surface: #fff; --text: #1a1d23; --muted: #5f6672; --border: #e1e4e9;
@@ -53,6 +53,7 @@
   .meta { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
   .tag { background: var(--accent-weak); color: var(--accent); border-radius: 4px; padding: 1px 6px; }
   .tag.auction { background: var(--good-weak); color: var(--good); }
+  .tag.offer { background: var(--good-weak); color: var(--good); font-weight: 600; }
   .empty { color: var(--muted); padding: 24px 0; }
 
   .tool { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
@@ -82,8 +83,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>eBay Schnäppchen</h1>
-    <p class="sub">Angebote, die deutlich unter dem üblichen Preis liegen – inkl. Versand, nur Artikelstandort Deutschland.</p>
+    <h1>Grafikkarten-Schnäppchen</h1>
+    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem üblichen Preis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör und Komplett-PCs sind herausgefiltert.</p>
     <div class="status" id="status">Lade Angebote …</div>
   </header>
 
@@ -97,6 +98,7 @@
       <option value="all">Alle Formate</option>
       <option value="bin">Nur Sofort-Kaufen</option>
       <option value="auction">Nur Auktionen</option>
+      <option value="offer">Preisvorschlag möglich</option>
     </select>
     <select id="sort" aria-label="Sortierung">
       <option value="discount">Größter Rabatt</option>
@@ -109,36 +111,42 @@
   <h2>Selbst suchen</h2>
   <div class="tool">
     <form id="linkform">
-      <input name="q" placeholder="z. B. lego technic konvolut" required>
+      <input name="q" placeholder="z. B. rtx 4070 ti super" required>
       <input name="max" type="number" min="1" placeholder="max. €">
       <button class="btn" type="submit">Links erzeugen</button>
     </form>
     <div class="links" id="customlinks"></div>
   </div>
 
-  <h2>Beobachtete Suchen</h2>
+  <h2>Beobachtete Modelle</h2>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Suche</th><th>Max.</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
+      <thead><tr><th>Modell</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
       <tbody id="searches"></tbody>
     </table>
   </div>
 
-  <h2>Was sich lohnt</h2>
+  <h2>Auktion oder Sofort-Kaufen?</h2>
   <div class="tips">
-    <div><h3>Konvolute aufteilen</h3><p>LEGO, Playmobil, Spiele oder Bücher im Paket kaufen und einzeln verkaufen. Der Einzelwert ist oft das Zwei- bis Dreifache.</p></div>
-    <div><h3>„Defekt“ reparieren</h3><p>Smartphones, Dyson, Kaffeevollautomaten: oft ist nur Akku, Display oder Dichtung hin. Lohnt sich nur mit Erfahrung und Teilepreisen im Blick.</p></div>
-    <div><h3>Verkaufte Preise prüfen</h3><p>Nie nach Angebotspreisen kalkulieren. Der Link „Verkauft“ zeigt, was wirklich bezahlt wurde.</p></div>
-    <div><h3>Schlecht inseriert = billig</h3><p>Tippfehler im Titel, dunkle Fotos oder falsche Kategorie: solche Angebote finden weniger Bieter.</p></div>
-    <div><h3>Auktionen zur falschen Zeit</h3><p>Auktionen, die werktags vormittags oder nachts enden, gehen oft günstiger weg als am Sonntagabend.</p></div>
-    <div><h3>Abholung lokal</h3><p>„Nur Abholung“ schreckt die meisten Käufer ab: Möbel, Werkzeug, große Elektronik in der Nähe.</p></div>
-    <div><h3>Kosten ehrlich rechnen</h3><p>Versand, Verpackung, Zeit und Rücksendungen einplanen. Als gewerblicher Verkäufer fallen Gebühren, Gewährleistung und Steuern an.</p></div>
-    <div><h3>Finger weg</h3><p>Neue Markenware „zu billig“, Handys mit iCloud-Sperre, Tickets, Gutscheine: hohes Betrugs- und Fälschungsrisiko.</p></div>
+    <div><h3>Kaufen: Preisvorschlag zuerst</h3><p>Bei Sofort-Kaufen mit „Preisvorschlag“ sind 10–20 % unter dem Preis oft drin. Freundlich, mit Begründung („vergleichbare Karten gingen für … weg“).</p></div>
+    <div><h3>Kaufen: Auktion nur am Ende</h3><p>Erst in den letzten Sekunden bieten, und nur einmal mit deinem echten Maximum. Früh bieten treibt den Preis. Auktionen, die werktags vormittags oder nachts enden, sind am günstigsten.</p></div>
+    <div><h3>Verkaufen: Sofort-Kaufen + Preisvorschlag</h3><p>Grafikkarten haben einen klaren Marktpreis. Preis knapp über „Verkauft“-Niveau ansetzen und Preisvorschläge erlauben – planbarer als eine Auktion.</p></div>
+    <div><h3>Verkaufen: Auktion nur Sonntagabend</h3><p>Wenn Auktion, dann 7 Tage, Ende Sonntag 19–21 Uhr. Bei gefragten Modellen kann das mehr bringen, bei Nischenkarten droht ein Schleuderpreis.</p></div>
+  </div>
+
+  <h2>Checkliste Grafikkarte</h2>
+  <div class="tips">
+    <div><h3>Echte Fotos</h3><p>Fotos der konkreten Karte, möglichst mit Zettel und Name. Stockfotos und brandneue Accounts mit Top-Karten zum Kampfpreis sind ein Warnsignal.</p></div>
+    <div><h3>Funktionsnachweis</h3><p>Nach einem Screenshot von GPU-Z und einem kurzen Benchmark (z. B. 3DMark, FurMark) fragen. Seriöse Verkäufer haben damit kein Problem.</p></div>
+    <div><h3>Rechnung &amp; Garantie</h3><p>Mit Rechnung steigt der Wiederverkaufswert. Bei vielen Herstellern läuft die Garantie auch für den Zweitbesitzer weiter.</p></div>
+    <div><h3>Mining-Karten</h3><p>Nicht automatisch schlecht, aber Lüfter und Wärmeleitpads können verschlissen sein. Temperaturen unter Last erfragen.</p></div>
+    <div><h3>Nur über eBay bezahlen</h3><p>Nie per Überweisung oder „PayPal Freunde“ außerhalb von eBay. Sonst fällt der Käuferschutz weg – häufigste Betrugsmasche bei Grafikkarten.</p></div>
+    <div><h3>Spanne realistisch</h3><p>Nach Versand (versichert!) und Risiko bleiben bei Grafikkarten meist 20–60 € pro Karte. Lohnend wird es über Menge und schnelles Weiterverkaufen.</p></div>
   </div>
 
   <footer>
     Daten über die eBay Browse API, aktualisiert per GitHub Action. „Üblicher Preis“ ist der Median der relevantesten
-    Sofort-Kaufen-Angebote zur gleichen Suche – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
+    Sofort-Kaufen-Angebote zum gleichen Modell – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
     und Verkäuferbewertung prüfen. Keine Verbindung zu eBay Inc.
   </footer>
 </div>
@@ -182,7 +190,7 @@ function renderGrid() {
   const grid = document.getElementById("grid");
   let list = state.deals.filter((d) =>
     (state.search === "all" || d.search === state.search) &&
-    (state.type === "all" || (state.type === "auction") === d.auction) &&
+    (state.type === "all" || (state.type === "offer" ? d.bestOffer : (state.type === "auction") === d.auction)) &&
     (!d.endsAt || new Date(d.endsAt) > Date.now()));
   const by = {
     discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
@@ -202,8 +210,9 @@ function renderGrid() {
       d.discount > 0 ? el("span", { class: "badge" }, `−${d.discount} %`) : null);
     const meta = el("div", { class: "meta" },
       el("span", { class: "tag" + (d.auction ? " auction" : "") },
-        d.auction ? `Auktion · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
+        d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
       d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
+      d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
       d.condition ? el("span", { class: "tag" }, d.condition) : null);
     grid.append(el("a", { class: "card", href: d.url, target: "_blank", rel: "noopener" },
       thumb,
@@ -231,9 +240,8 @@ function renderSearches(searches) {
   document.getElementById("searches").replaceChildren(...searches.map((s) =>
     el("tr", {},
       el("td", {}, el("strong", {}, s.label), el("br"), el("span", { style: "color:var(--muted)" }, s.query)),
-      el("td", {}, eur.format(s.maxPrice)),
       el("td", {}, s.note ?? ""),
-      el("td", {}, ...ebayLinks(s.query, s.maxPrice).map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t))))));
+      el("td", {}, ...ebayLinks(s.query).map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t))))));
 }
 
 document.getElementById("type").onchange = (e) => { state.type = e.target.value; renderGrid(); };

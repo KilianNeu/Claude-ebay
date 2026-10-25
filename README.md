@@ -1,9 +1,10 @@
-# eBay Schnäppchen
+# Grafikkarten-Schnäppchen
 
-Eine GitHub-Pages-Seite, die günstige eBay.de-Angebote mit Wiederverkaufspotenzial anzeigt.
+Eine GitHub-Pages-Seite, die gebrauchte Grafikkarten auf eBay.de unter Marktpreis anzeigt.
 Eine GitHub Action fragt alle 3 Stunden die eBay Browse API ab, vergleicht jedes Angebot
 (inkl. Versand) mit dem Median der üblichen Sofort-Kaufen-Preise derselben Suche und zeigt
-alles an, was mindestens 35 % darunter liegt.
+alles an, was mindestens 15 % darunter liegt. Defekte Karten, Zubehör und
+Komplett-PCs werden über Ausschlusswörter herausgefiltert.
 
 ## Einrichten
 
@@ -20,8 +21,13 @@ funktionieren.
 
 ## Suchen anpassen
 
-`searches.json` bearbeiten: je Suche `label`, `query`, `maxPrice` (in €) und eine kurze `note`.
-`dealThreshold: 0.65` heißt: höchstens 65 % des üblichen Preises.
+`searches.json` bearbeiten: je Modell `label`, `query`, optional `exclude` (zusätzliche
+Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
+
+- `dealThreshold: 0.85` – höchstens 85 % des üblichen Preises
+- `floorRatio: 0.4` – alles unter 40 % gilt als Zubehör/Fake und wird ignoriert
+- `exclude` – Wörter, die nie im Titel vorkommen dürfen (ganze Wörter)
+- `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
 
 ## Lokal testen
 

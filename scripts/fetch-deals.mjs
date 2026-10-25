@@ -22,6 +22,7 @@ async function getToken(id, secret) {
 }
 
 async function search(token, params) {
+  if (config.categoryIds) params = { category_ids: config.categoryIds, ...params };
   const url = `${API}/buy/browse/v1/item_summary/search?` + new URLSearchParams(params);
   const res = await fetch(url, {
     headers: {
@@ -45,6 +46,12 @@ function totalPrice(item) {
   return base + (Number.isFinite(ship) ? ship : 0);
 }
 
+// Ausschlusswörter als ganze Wörter prüfen, damit "ti" nicht in "Edition" greift.
+function excluded(title, terms) {
+  const t = title.toLowerCase();
+  return terms.some((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
+}
+
 function median(values) {
   const v = values.filter(Number.isFinite).sort((a, b) => a - b);
   if (!v.length) return NaN;
@@ -62,6 +69,7 @@ function toDeal(item, s, reference) {
     image: item.image?.imageUrl ?? item.thumbnailImages?.[0]?.imageUrl ?? null,
     condition: item.condition ?? null,
     auction,
+    bestOffer: item.buyingOptions?.includes("BEST_OFFER") ?? false,
     bids: auction ? item.bidCount ?? 0 : null,
     endsAt: item.itemEndDate ?? null,
     total: Math.round(total * 100) / 100,
@@ -74,10 +82,18 @@ function toDeal(item, s, reference) {
 }
 
 async function dealsFor(token, s) {
-  const filter = `price:[..${s.maxPrice}],priceCurrency:${config.currency},itemLocationCountry:DE`;
-  // Referenzpreis: Median der relevantesten Sofortkauf-Angebote ohne Preisgrenze.
-  const refItems = await search(token, { q: s.query, filter: "buyingOptions:{FIXED_PRICE}", limit: "50" });
+  const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
+  const keep = (items) => items.filter((i) => !excluded(i.title ?? "", terms));
+  const where = `priceCurrency:${config.currency},itemLocationCountry:DE`;
+
+  // Referenzpreis: Median der relevantesten Sofortkauf-Angebote (ohne Zubehör, Defekte usw.).
+  const refItems = keep(await search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }));
   const reference = median(refItems.map(totalPrice));
+  // Ohne Referenz lässt sich kein Schnäppchen erkennen.
+  if (!Number.isFinite(reference)) return [];
+  const floor = reference * (config.floorRatio ?? 0);
+  const cap = s.maxPrice ?? reference * config.dealThreshold;
+  const filter = `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where}`;
 
   const [cheapest, ending] = await Promise.all([
     search(token, { q: s.query, filter: `${filter},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "30" }),
@@ -85,12 +101,14 @@ async function dealsFor(token, s) {
   ]);
 
   const seen = new Set();
-  return [...cheapest, ...ending]
+  const deals = keep([...cheapest, ...ending])
     .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
     .map((i) => toDeal(i, s, reference))
-    .filter((d) => Number.isFinite(d.total) && (d.reference === null || d.total <= d.reference * config.dealThreshold))
+    .filter((d) => Number.isFinite(d.total) && d.total >= floor && d.total <= reference * config.dealThreshold)
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
     .slice(0, config.maxItemsPerSearch);
+  console.log(`  ${s.label}: Referenz ${reference.toFixed(0)} € aus ${refItems.length} Angeboten, ${deals.length} Treffer`);
+  return deals;
 }
 
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = process.env;
