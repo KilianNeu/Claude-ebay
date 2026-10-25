@@ -75,7 +75,20 @@
     "shenzhen",
     "overseas",
     "aus china",
-    "versand aus china"
+    "versand aus china",
+    "setup",
+    "gaming setup",
+    "monitor",
+    "monitore",
+    "i5",
+    "i7",
+    "i9",
+    "ryzen",
+    "bundle",
+    "system",
+    "tower",
+    "mainboard",
+    "cpu"
   ],
   "searches": [
     {
@@ -158,9 +171,19 @@
       "label": "RTX 4080",
       "query": "rtx 4080",
       "exclude": [
-        "laptop"
+        "4080s",
+        "laptop",
+        "super"
       ],
       "note": "Hoher Preis, also auch hohe absolute Spanne"
+    },
+    {
+      "label": "RTX 4080 Super",
+      "query": "rtx 4080 super",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "Etwas schneller und oft günstiger als die alte 4080"
     },
     {
       "label": "RTX 4090",
