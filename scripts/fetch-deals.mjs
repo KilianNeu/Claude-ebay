@@ -112,6 +112,7 @@ function toDeal(item, s, reference) {
     bids: auction ? item.bidCount ?? 0 : null,
     endsAt: item.itemEndDate ?? null,
     total: Math.round(total * 100) / 100,
+    shipping: Number.isFinite(num(item.shippingOptions?.[0]?.shippingCost)) ? num(item.shippingOptions[0].shippingCost) : null,
     reference: Number.isFinite(reference) ? Math.round(reference * 100) / 100 : null,
     discount: Number.isFinite(reference) && reference > 0 ? Math.round((1 - total / reference) * 100) : null,
     location: item.itemLocation?.country ?? null,
@@ -186,7 +187,11 @@ async function settle(token, s, seenIds) {
 
 function soldStats(label) {
   const prices = history.sold.filter((x) => x.model === label && x.at > now - SOLD_WINDOW).map((x) => x.price);
-  return { soldMedian: median(prices), soldCount: prices.length };
+  return {
+    soldMedian: median(prices), soldCount: prices.length,
+    soldMin: quantile(prices, 0), soldP25: quantile(prices, 0.25), soldP75: quantile(prices, 0.75), soldMax: quantile(prices, 1),
+    soldAvg: prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : NaN,
+  };
 }
 
 const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
@@ -212,10 +217,20 @@ async function dealsFor(token, s) {
     const plausible = refItems.map(totalPrice).filter((v) => v >= askMedian * (config.floorRatio ?? 0));
     (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(Math.min(...plausible))]);
   }
-  const { soldMedian, soldCount } = soldStats(s.label);
+  const sold = soldStats(s.label);
+  const { soldMedian, soldCount } = sold;
+  // Kennzahlen der Angebote ohne Ausreißer unter der Preisuntergrenze.
+  const asks = refItems.map(totalPrice).filter((v) => v >= askMedian * (config.floorRatio ?? 0));
   const useSold = soldCount >= MIN_SOLD;
   const reference = useSold ? soldMedian : askMedian;
-  const market = { label: s.label, askMedian: round(askMedian), askCount: refItems.length, soldMedian: round(soldMedian), soldCount, basis: useSold ? "sold" : "ask" };
+  const market = {
+    label: s.label, basis: useSold ? "sold" : "ask",
+    askCount: refItems.length, askMedian: round(askMedian),
+    askMin: round(quantile(asks, 0)), askMax: round(quantile(asks, 1)),
+    askAvg: round(asks.reduce((a, b) => a + b, 0) / asks.length),
+    soldCount, soldMedian: round(soldMedian), soldAvg: round(sold.soldAvg),
+    soldMin: round(sold.soldMin), soldP25: round(sold.soldP25), soldP75: round(sold.soldP75), soldMax: round(sold.soldMax),
+  };
 
   let deals = [], cheapest = [];
   // Ohne Referenz lässt sich kein Schnäppchen erkennen.
@@ -280,7 +295,9 @@ function buildStats() {
 }
 
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = process.env;
-const result = { updatedAt: new Date().toISOString(), searches: config.searches, markets: [], deals: [], errors: [] };
+const result = {
+  updatedAt: new Date().toISOString(), dealThreshold: config.dealThreshold, searches: config.searches, markets: [], deals: [], errors: [],
+};
 
 if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   result.errors.push("Keine eBay-API-Keys hinterlegt (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET).");

@@ -95,6 +95,23 @@
     padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); }
   .empty-chart { color: var(--muted); padding: 40px 0; text-align: center; }
   .sales td { font-variant-numeric: tabular-nums; }
+  /* Reiter */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 8px 0 20px; }
+  .tab { font: inherit; font-size: 15px; font-weight: 600; background: none; border: 0; color: var(--muted);
+    padding: 10px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+  [role="tabpanel"] > h2:first-child { margin-top: 0; }
+
+  /* Marktdaten auf den Karten */
+  .mk { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; display: grid; gap: 4px; font-size: 12px; }
+  .mkrow { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
+  .mkrow b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .range { position: relative; height: 14px; margin: 2px 0; }
+  .range .track { position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--border); border-radius: 1px; }
+  .range .band { position: absolute; top: 4px; height: 6px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 3px; }
+  .range .mark { position: absolute; top: 1px; width: 3px; height: 12px; margin-left: -1.5px; background: var(--text); border-radius: 2px; }
+  .hint { color: var(--text); }
+  .hint.good { color: var(--good); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -106,6 +123,13 @@
   </header>
 
   <div id="notice" class="notice" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabbtn-angebote" aria-controls="tab-angebote" data-tab="angebote">Angebote</button>
+    <button class="tab" role="tab" id="tabbtn-statistik" aria-controls="tab-statistik" data-tab="statistik">Preisstatistik</button>
+  </nav>
+
+  <section id="tab-angebote" role="tabpanel" aria-labelledby="tabbtn-angebote">
 
   <div class="controls">
     <div class="chips" id="chips"></div>
@@ -135,6 +159,27 @@
     <div class="links" id="customlinks"></div>
   </div>
 
+  <h2>Auktion oder Sofort-Kaufen?</h2>
+  <div class="tips">
+    <div><h3>Kaufen: Preisvorschlag zuerst</h3><p>Bei Sofort-Kaufen mit „Preisvorschlag“ sind 10–20 % unter dem Preis oft drin. Freundlich, mit Begründung („vergleichbare Karten gingen für … weg“).</p></div>
+    <div><h3>Kaufen: Auktion nur am Ende</h3><p>Erst in den letzten Sekunden bieten, und nur einmal mit deinem echten Maximum. Früh bieten treibt den Preis. Auktionen, die werktags vormittags oder nachts enden, sind am günstigsten.</p></div>
+    <div><h3>Verkaufen: Sofort-Kaufen + Preisvorschlag</h3><p>Grafikkarten haben einen klaren Marktpreis. Preis knapp über „Verkauft“-Niveau ansetzen und Preisvorschläge erlauben – planbarer als eine Auktion.</p></div>
+    <div><h3>Verkaufen: Auktion nur Sonntagabend</h3><p>Wenn Auktion, dann 7 Tage, Ende Sonntag 19–21 Uhr. Bei gefragten Modellen kann das mehr bringen, bei Nischenkarten droht ein Schleuderpreis.</p></div>
+  </div>
+
+  <h2>Checkliste Grafikkarte</h2>
+  <div class="tips">
+    <div><h3>Echte Fotos</h3><p>Fotos der konkreten Karte, möglichst mit Zettel und Name. Stockfotos und brandneue Accounts mit Top-Karten zum Kampfpreis sind ein Warnsignal.</p></div>
+    <div><h3>Funktionsnachweis</h3><p>Nach einem Screenshot von GPU-Z und einem kurzen Benchmark (z. B. 3DMark, FurMark) fragen. Seriöse Verkäufer haben damit kein Problem.</p></div>
+    <div><h3>Rechnung &amp; Garantie</h3><p>Mit Rechnung steigt der Wiederverkaufswert. Bei vielen Herstellern läuft die Garantie auch für den Zweitbesitzer weiter.</p></div>
+    <div><h3>Mining-Karten</h3><p>Nicht automatisch schlecht, aber Lüfter und Wärmeleitpads können verschlissen sein. Temperaturen unter Last erfragen.</p></div>
+    <div><h3>Nur über eBay bezahlen</h3><p>Nie per Überweisung oder „PayPal Freunde“ außerhalb von eBay. Sonst fällt der Käuferschutz weg – häufigste Betrugsmasche bei Grafikkarten.</p></div>
+    <div><h3>Spanne realistisch</h3><p>Nach Versand (versichert!) und Risiko bleiben bei Grafikkarten meist 20–60 € pro Karte. Lohnend wird es über Menge und schnelles Weiterverkaufen.</p></div>
+  </div>
+
+  </section>
+
+  <section id="tab-statistik" role="tabpanel" aria-labelledby="tabbtn-statistik" hidden>
   <h2>Preisstatistik</h2>
   <div class="controls" style="margin-top:0">
     <select id="statmodel" aria-label="Modell"></select>
@@ -160,8 +205,8 @@
   </div>
 
   <h2>Marktpreise</h2>
-  <p class="sub" style="margin-bottom:12px">„Verkauft“ ist der Median der letzten 30 Tage aus eigener Beobachtung: Auktionen mit dem letzten Gebot
-    vor Ende (eher etwas zu niedrig) und beendete Sofort-Kaufen-Angebote (Preisvorschläge nicht sichtbar, eher etwas zu hoch).
+  <p class="sub" style="margin-bottom:12px">„Verkauft“ ist der Median der letzten 30 Tage aus eigener Beobachtung: Endpreise beendeter Auktionen
+    und beendete Sofort-Kaufen-Angebote (Preisvorschläge nicht sichtbar, daher eher etwas zu hoch).
     Ab 5 Verkäufen ist er die Referenz für Schnäppchen, sonst der Angebotspreis.</p>
   <div class="tablewrap">
     <table>
@@ -169,24 +214,7 @@
       <tbody id="searches"></tbody>
     </table>
   </div>
-
-  <h2>Auktion oder Sofort-Kaufen?</h2>
-  <div class="tips">
-    <div><h3>Kaufen: Preisvorschlag zuerst</h3><p>Bei Sofort-Kaufen mit „Preisvorschlag“ sind 10–20 % unter dem Preis oft drin. Freundlich, mit Begründung („vergleichbare Karten gingen für … weg“).</p></div>
-    <div><h3>Kaufen: Auktion nur am Ende</h3><p>Erst in den letzten Sekunden bieten, und nur einmal mit deinem echten Maximum. Früh bieten treibt den Preis. Auktionen, die werktags vormittags oder nachts enden, sind am günstigsten.</p></div>
-    <div><h3>Verkaufen: Sofort-Kaufen + Preisvorschlag</h3><p>Grafikkarten haben einen klaren Marktpreis. Preis knapp über „Verkauft“-Niveau ansetzen und Preisvorschläge erlauben – planbarer als eine Auktion.</p></div>
-    <div><h3>Verkaufen: Auktion nur Sonntagabend</h3><p>Wenn Auktion, dann 7 Tage, Ende Sonntag 19–21 Uhr. Bei gefragten Modellen kann das mehr bringen, bei Nischenkarten droht ein Schleuderpreis.</p></div>
-  </div>
-
-  <h2>Checkliste Grafikkarte</h2>
-  <div class="tips">
-    <div><h3>Echte Fotos</h3><p>Fotos der konkreten Karte, möglichst mit Zettel und Name. Stockfotos und brandneue Accounts mit Top-Karten zum Kampfpreis sind ein Warnsignal.</p></div>
-    <div><h3>Funktionsnachweis</h3><p>Nach einem Screenshot von GPU-Z und einem kurzen Benchmark (z. B. 3DMark, FurMark) fragen. Seriöse Verkäufer haben damit kein Problem.</p></div>
-    <div><h3>Rechnung &amp; Garantie</h3><p>Mit Rechnung steigt der Wiederverkaufswert. Bei vielen Herstellern läuft die Garantie auch für den Zweitbesitzer weiter.</p></div>
-    <div><h3>Mining-Karten</h3><p>Nicht automatisch schlecht, aber Lüfter und Wärmeleitpads können verschlissen sein. Temperaturen unter Last erfragen.</p></div>
-    <div><h3>Nur über eBay bezahlen</h3><p>Nie per Überweisung oder „PayPal Freunde“ außerhalb von eBay. Sonst fällt der Käuferschutz weg – häufigste Betrugsmasche bei Grafikkarten.</p></div>
-    <div><h3>Spanne realistisch</h3><p>Nach Versand (versichert!) und Risiko bleiben bei Grafikkarten meist 20–60 € pro Karte. Lohnend wird es über Menge und schnelles Weiterverkaufen.</p></div>
-  </div>
+  </section>
 
   <footer>
     Daten über die eBay Browse API, aktualisiert per GitHub Action. Referenz ist der geschätzte Verkaufspreis
@@ -198,7 +226,7 @@
 <script>
 const EBAY = "https://www.ebay.de/sch/i.html";
 const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-const state = { search: "all", type: "all", sort: "discount", deals: [] };
+const state = { search: "all", type: "all", sort: "discount", deals: [], markets: {}, dealThreshold: 0.85 };
 
 function ebayLinks(query, max) {
   const base = { _nkw: query, LH_PrefLoc: "1" };
@@ -264,8 +292,51 @@ function renderGrid() {
         el("div", { class: "title" }, d.title),
         meta,
         el("div", { class: "price" }, eur.format(d.total)),
-        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"))));
+        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"),
+        marketBlock(d))));
   }
+}
+
+const euro0 = (v) => eur.format(v).replace(",00", "");
+
+// Marktdaten des Modells für eine Angebotskarte: Verkäufe und Angebote (Min/Ø/Median/Max),
+// Lage des Preises in der Spanne und bei Auktionen Luft bis zum Marktpreis plus Maximalgebot.
+function marketBlock(d) {
+  const m = state.markets[d.search];
+  if (!m) return null;
+  const hasSold = m.soldCount > 0;
+  const rows = [];
+  if (hasSold) rows.push(el("div", { class: "mkrow" }, el("span", {}, `Verkauft (${m.soldCount}×, 30 T.)`),
+    el("b", {}, `Ø ${euro0(m.soldAvg)} (${euro0(m.soldMin)}–${euro0(m.soldMax)})`)));
+  rows.push(el("div", { class: "mkrow" }, el("span", {}, `Angebote (${m.askCount}×)`),
+    el("b", {}, m.askMin != null ? `Ø ${euro0(m.askAvg)} (${euro0(m.askMin)}–${euro0(m.askMax)})` : "–")));
+  rows.push(el("div", { class: "mkrow" }, el("span", {}, "Median verkauft / angeboten"),
+    el("b", {}, `${hasSold ? euro0(m.soldMedian) : "–"} / ${m.askMedian != null ? euro0(m.askMedian) : "–"}`)));
+
+  // Spannenbalken: Min–Max (Verkäufe, sonst Angebote), Band = mittlere 50 % der Verkäufe
+  const lo = Math.min(hasSold ? m.soldMin : m.askMin, d.total), hi = Math.max(hasSold ? m.soldMax : m.askMax, d.total);
+  if (Number.isFinite(lo) && hi > lo) {
+    const pos = (v) => `${((v - lo) / (hi - lo) * 100).toFixed(1)}%`;
+    const band = hasSold && m.soldCount >= 4
+      ? el("div", { class: "band", style: `left:${pos(m.soldP25)};width:calc(${pos(m.soldP75)} - ${pos(m.soldP25)})` }) : null;
+    rows.push(el("div", { class: "range", title: "Strich = dieses Angebot, Band = mittlere 50 % der Verkäufe" },
+      el("div", { class: "track" }), band, el("div", { class: "mark", style: `left:${pos(d.total)}` })));
+  }
+
+  // Wie viele Verkäufe lagen über diesem Preis?
+  const sales = (stats.models.find((x) => x.label === d.search)?.sales ?? []).filter((x) => x.t > Date.now() - 30 * 864e5);
+  if (sales.length >= 3) {
+    const share = Math.round(sales.filter((x) => x.price > d.total).length / sales.length * 100);
+    rows.push(el("div", { class: "hint" + (share >= 75 ? " good" : "") }, `Günstiger als ${share} % der Verkäufe`));
+  }
+  if (d.auction && d.reference) {
+    const room = d.reference - d.total;
+    const maxBid = d.reference * (state.dealThreshold ?? 0.85) - (d.shipping ?? 0);
+    rows.push(el("div", { class: "hint" }, room > 0 ? `Bis Marktpreis noch ${euro0(room)} Luft` : "Gebot liegt schon über dem Marktpreis"));
+    if (maxBid > 0) rows.push(el("div", { class: "hint good" }, `Lohnendes Maximalgebot: ${euro0(maxBid)}`
+      + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")));
+  }
+  return el("div", { class: "mk" }, ...rows);
 }
 
 function renderChips(searches) {
@@ -434,6 +505,8 @@ async function load() {
     try { data.searches = (await (await fetch("searches.json")).json()).searches; } catch {}
   }
   state.deals = data.deals ?? [];
+  state.markets = Object.fromEntries((data.markets ?? []).map((m) => [m.label, m]));
+  state.dealThreshold = data.dealThreshold ?? 0.85;
   document.getElementById("status").textContent = data.updatedAt
     ? `Stand: ${new Date(data.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · ${state.deals.length} Angebote`
     : "Noch keine Daten.";
@@ -444,10 +517,25 @@ async function load() {
   }
   renderChips(data.searches ?? []);
   renderSearches(data.searches ?? [], data.markets);
-  loadStats(data.searches ?? []);
+  await loadStats(data.searches ?? []);
   renderGrid();
 }
 load();
+function showTab(name) {
+  if (!document.getElementById(`tab-${name}`)) name = "angebote";
+  for (const b of document.querySelectorAll(".tab")) {
+    const on = b.dataset.tab === name;
+    b.setAttribute("aria-selected", String(on));
+    document.getElementById(`tab-${b.dataset.tab}`).hidden = !on;
+  }
+  // Diagramm braucht die sichtbare Breite
+  if (name === "statistik" && stats.current) renderStats();
+}
+for (const b of document.querySelectorAll(".tab")) {
+  b.onclick = () => { history.replaceState(null, "", b.dataset.tab === "angebote" ? location.pathname : `#${b.dataset.tab}`); showTab(b.dataset.tab); };
+}
+addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+showTab(location.hash.slice(1));
 </script>
 </body>
 </html>
