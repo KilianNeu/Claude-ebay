@@ -1,6 +1,6 @@
 # Grafikkarten-Schnäppchen
 
-Eine GitHub-Pages-Seite, die gebrauchte Grafikkarten auf eBay.de unter Marktpreis anzeigt.
+Eine GitHub-Pages-Seite, die Grafikkarten (neu und gebraucht) auf eBay.de unter Marktpreis anzeigt.
 Eine GitHub Action fragt stündlich die eBay Browse API ab, vergleicht jedes Angebot
 (inkl. Versand) mit dem Marktpreis des Modells und zeigt
 alles an, was mindestens 15 % darunter liegt. Defekte Karten, Zubehör und
@@ -48,7 +48,8 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
   weniger positiven Bewertungen werden ausgeschlossen
 - `excludeParts` – Wortteile, die auch in Zusammensetzungen greifen (z. B. „Kühlkörper“ in „Lüfter+Kühlkörper“)
 - `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
-- `conditionIds` – nur gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist ausgeschlossen
+- `conditionIds` – neue, gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist
+  ausgeschlossen. Neue (1000, 1500) und gebrauchte Karten werden gegen den Median ihrer eigenen Gruppe bewertet
 
 ## Lokal testen
 

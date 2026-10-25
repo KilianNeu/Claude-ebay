@@ -18,6 +18,7 @@ const HOUR = 3.6e6, DAY = 24 * HOUR;
 const SOLD_WINDOW = 30 * DAY;     // Verkäufe der letzten 30 Tage zählen
 const MIN_SOLD = 5;               // ab so vielen Verkäufen ersetzt der Verkaufspreis den Angebotspreis
 const MIN_ASK = 5;                // weniger Angebote ergeben keinen verlässlichen Angebotspreis
+const NEW_CONDITIONS = new Set(["1000", "1500"]); // Neu, Neu: Sonstige
 const MAX_CHECKS = 20;            // getItem-Prüfungen verschwundener Sofort-Kaufen-Angebote pro Lauf
 const MAX_AUCTION_CHECKS = 60;    // getItem-Abfragen beendeter Auktionen pro Lauf
 const now = Date.now();
@@ -258,58 +259,69 @@ async function dealsFor(token, s) {
   // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
   // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
   const [refItems, ending] = await Promise.all([
-    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }).then(keep).then(binOnly),
+    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "200" }).then(keep).then(binOnly),
     search(token, { q: s.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
   ]);
   remember([...refItems, ...ending], s);
   await settle(token, s, new Set([...refItems, ...ending].map((i) => i.itemId)));
 
-  const askMedian = median(refItems.map(totalPrice));
+  // Neue und gebrauchte Karten getrennt bewerten: Händler-Neuware würde sonst den Preis alter
+  // Gebrauchtkarten hochziehen, und neue Generationen gibt es gebraucht noch kaum.
+  const isNew = (i) => NEW_CONDITIONS.has(i.conditionId);
+  const priceStats = (items) => {
+    const m = median(items.map(totalPrice));
+    const v = items.map(totalPrice).filter((x) => x >= m * (config.floorRatio ?? 0));
+    return { count: items.length, median: m, min: quantile(v, 0), max: quantile(v, 1), avg: v.reduce((a, b) => a + b, 0) / v.length };
+  };
+  const all = priceStats(refItems), used = priceStats(refItems.filter((i) => !isNew(i))), fresh = priceStats(refItems.filter(isNew));
+  const askMedian = all.median;
   if (Number.isFinite(askMedian)) {
-    // Günstigstes Angebot ohne Ausreißer (Zubehör, Fakes) unterhalb der Preisuntergrenze.
-    const plausible = refItems.map(totalPrice).filter((v) => v >= askMedian * (config.floorRatio ?? 0));
-    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(Math.min(...plausible))]);
+    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(all.min)]);
   }
   const sold = soldStats(s.label);
   const { soldMedian, soldCount } = sold;
-  // Kennzahlen der Angebote ohne Ausreißer unter der Preisuntergrenze.
-  const asks = refItems.map(totalPrice).filter((v) => v >= askMedian * (config.floorRatio ?? 0));
   const useSold = soldCount >= MIN_SOLD;
-  const reference = useSold ? soldMedian : askMedian;
+  // Referenz je Zustand: Verkaufspreis, sonst Angebotsmedian der eigenen Gruppe, sonst aller Angebote.
+  const askRef = (group) => group.count >= MIN_ASK ? group.median : all.count >= MIN_ASK ? all.median : NaN;
+  const refFor = (i) => useSold ? soldMedian : askRef(isNew(i) ? fresh : used);
   const market = {
     label: s.label, basis: useSold ? "sold" : "ask",
-    askCount: refItems.length, askMedian: round(askMedian),
-    askMin: round(quantile(asks, 0)), askMax: round(quantile(asks, 1)),
-    askAvg: round(asks.reduce((a, b) => a + b, 0) / asks.length),
+    askCount: all.count, askMedian: round(all.median), askMin: round(all.min), askMax: round(all.max), askAvg: round(all.avg),
+    usedCount: used.count, usedMedian: round(used.median), newCount: fresh.count, newMedian: round(fresh.median),
     soldCount, soldMedian: round(soldMedian), soldAvg: round(sold.soldAvg),
     soldMin: round(sold.soldMin), soldP25: round(sold.soldP25), soldP75: round(sold.soldP75), soldMax: round(sold.soldMax),
   };
 
   let deals = [], cheapest = [];
+  const refs = [useSold ? soldMedian : NaN, askRef(used), askRef(fresh)].filter(Number.isFinite);
   // Ohne verlässliche Referenz lässt sich kein Schnäppchen erkennen.
-  if (Number.isFinite(reference) && (useSold || refItems.length >= MIN_ASK)) {
-    const floor = reference * (config.floorRatio ?? 0);
-    const cap = s.maxPrice ?? reference * config.dealThreshold;
+  if (refs.length) {
+    // Kandidaten breit holen, bewertet wird jedes Angebot gegen die Referenz seines Zustands.
+    const floor = Math.min(...refs) * (config.floorRatio ?? 0);
+    const cap = s.maxPrice ?? Math.max(...refs) * config.dealThreshold;
     cheapest = binOnly(keep(await search(token, {
-      q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "30",
+      q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "50",
     })));
     const seen = new Set();
     deals = [...cheapest, ...ending]
       .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
-      .map((i) => ({ ...toDeal(i, s, reference), basis: market.basis }))
-      .filter((d) => Number.isFinite(d.total) && d.total >= floor && d.total <= cap)
+      .map((i) => ({ i, ref: refFor(i) }))
+      .filter(({ ref }) => Number.isFinite(ref))
+      .map(({ i, ref }) => ({ ...toDeal(i, s, ref), basis: market.basis, isNew: isNew(i) }))
+      .filter((d) => Number.isFinite(d.total) && d.total >= d.reference * (config.floorRatio ?? 0)
+        && d.total <= (s.maxPrice ?? d.reference * config.dealThreshold))
       .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
       .slice(0, config.maxItemsPerSearch);
   }
 
   remember(cheapest, s);
 
-  // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze).
+  // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze), neu oder gebraucht.
   const bin = [...refItems, ...cheapest]
-    .map((i) => ({ price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title }))
+    .map((i) => ({ price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
     .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
     .sort((a, b) => a.price - b.price)[0];
-  if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title };
+  if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
   console.log(`  ${s.label}: Angebote ${round(askMedian)} € (${refItems.length}), verkauft ${round(soldMedian) ?? "–"} € (${soldCount}), ${deals.length} Treffer`);
   return { deals, market };
 }

@@ -119,7 +119,7 @@
 <div class="wrap">
   <header>
     <h1>Grafikkarten-Schnäppchen</h1>
-    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör, Komplett-PCs und Verkäufer mit weniger als 10 Bewertungen oder unter 97 % positiv sind herausgefiltert.</p>
+    <p class="sub">Grafikkarten bei eBay (gebraucht und neu), die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör, Komplett-PCs und Verkäufer mit weniger als 10 Bewertungen oder unter 97 % positiv sind herausgefiltert.</p>
     <div class="status" id="status">Lade Angebote …</div>
   </header>
 
@@ -296,7 +296,7 @@ function renderGrid() {
         el("div", { class: "title" }, d.title),
         meta,
         el("div", { class: "price" }, eur.format(d.total)),
-        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"),
+        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : d.isNew ? "neu angeboten" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"),
         marketBlock(d))));
   }
 }
@@ -316,6 +316,8 @@ function marketBlock(d) {
     el("b", {}, m.askMin != null ? `Ø ${euro0(m.askAvg)} (${euro0(m.askMin)}–${euro0(m.askMax)})` : "–")));
   if (m.cheapestBin) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Günstigster Sofortkauf"),
     el("b", {}, m.cheapestBin.url === d.url ? `${euro0(m.cheapestBin.price)} (dieses)` : euro0(m.cheapestBin.price))));
+  if (m.usedCount && m.newCount) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Angebote gebraucht / neu"),
+    el("b", {}, `${m.usedMedian != null ? euro0(m.usedMedian) : "–"} (${m.usedCount}×) / ${euro0(m.newMedian)} (${m.newCount}×)`)));
   rows.push(el("div", { class: "mkrow" }, el("span", {}, "Median verkauft / angeboten"),
     el("b", {}, `${hasSold ? euro0(m.soldMedian) : "–"} / ${m.askMedian != null ? euro0(m.askMedian) : "–"}`)));
 
@@ -401,11 +403,16 @@ function renderStats() {
   document.getElementById("tiles").replaceChildren(
     tile("Verkauft (Median, 30 Tage)", sd.n ? eur.format(sd.median) : "–", `${sd.n} Verkäufe`),
     tile("Typische Spanne", sd.n >= 4 ? `${eur.format(sd.p25)} – ${eur.format(sd.p75)}` : "–", "mittlere 50 % der Verkäufe"),
-    tile("Angebote jetzt (Median)", last ? eur.format(last[1]) : "–", last ? `${last[2]} Angebote` : ""),
+    (() => {
+      const mk = state.markets[m.label];
+      const split = mk?.usedCount && mk?.newCount ? ` · gebraucht ${euro0(mk.usedMedian)}, neu ${euro0(mk.newMedian)}` : "";
+      return tile("Angebote jetzt (Median)", last ? eur.format(last[1]) : "–", last ? `${last[2]} Angebote${split}` : "");
+    })(),
     (() => {
       const bin = state.markets[m.label]?.cheapestBin;
       return bin
-        ? tile("Günstigster Sofortkauf", eur.format(bin.price), el("a", { href: bin.url, target: "_blank", rel: "noopener" }, "Angebot ansehen"))
+        ? tile("Günstigster Sofortkauf", eur.format(bin.price),
+          el("span", {}, bin.isNew ? "neu · " : "gebraucht · ", el("a", { href: bin.url, target: "_blank", rel: "noopener" }, "Angebot ansehen")))
         : tile("Günstigster Sofortkauf", last ? eur.format(last[3]) : "–", "gebraucht, inkl. Versand, ohne Ausreißer");
     })());
 
