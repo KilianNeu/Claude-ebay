@@ -1,0 +1,18 @@
+{
+  "marketplace": "EBAY_DE",
+  "currency": "EUR",
+  "maxItemsPerSearch": 12,
+  "dealThreshold": 0.65,
+  "searches": [
+    { "label": "LEGO Konvolut",          "query": "lego konvolut",            "maxPrice": 40,  "note": "Sortieren, Sets komplettieren, Minifiguren einzeln verkaufen" },
+    { "label": "LEGO Minifiguren",       "query": "lego minifiguren sammlung", "maxPrice": 30,  "note": "Seltene Figuren einzeln oft deutlich teurer" },
+    { "label": "Nintendo DS / 3DS Spiele","query": "nintendo ds spiele konvolut","maxPrice": 35, "note": "Einzelspiele gehen gut, Pokémon-Titel besonders" },
+    { "label": "Game Boy",               "query": "game boy",                 "maxPrice": 40,  "note": "Retro-Konsolen steigen seit Jahren" },
+    { "label": "iPhone defekt",          "query": "iphone defekt",            "maxPrice": 80,  "note": "Nur mit Reparatur-Know-how; Ersatzteile einrechnen" },
+    { "label": "Makita / Bosch Akku-Werkzeug", "query": "makita akkuschrauber", "maxPrice": 50, "note": "Gebrauchtes Profi-Werkzeug ist sehr wertstabil" },
+    { "label": "Kamera-Objektive",       "query": "canon objektiv ef",        "maxPrice": 60,  "note": "Auf Pilz/Kratzer achten, Linsen sind wertstabil" },
+    { "label": "ThinkPad",               "query": "lenovo thinkpad",          "maxPrice": 120, "note": "Business-Laptops: günstig aus Leasingrückläufern" },
+    { "label": "Playmobil Konvolut",     "query": "playmobil konvolut",       "maxPrice": 30,  "note": "Sets sortieren und einzeln verkaufen" },
+    { "label": "Dyson defekt",           "query": "dyson defekt",             "maxPrice": 60,  "note": "Oft nur Akku oder Filter kaputt" }
+  ]
+}

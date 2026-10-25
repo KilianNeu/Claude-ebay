@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eBay Schnäppchen</title>
+<meta name="description" content="Günstige eBay-Angebote mit Wiederverkaufspotenzial – automatisch aktualisiert.">
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #fff; --text: #1a1d23; --muted: #5f6672; --border: #e1e4e9;
+    --accent: #0a62d0; --accent-weak: #e7f0fc; --good: #157a3c; --good-weak: #e3f4ea; --warn: #9a5b00;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111317; --surface: #1a1d23; --text: #e8eaee; --muted: #9aa1ad; --border: #2c313a;
+      --accent: #5a9cff; --accent-weak: #1c2a40; --good: #5fd08a; --good-weak: #17301f; --warn: #f0b45a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 32px 0 16px; }
+  h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -.02em; }
+  h2 { font-size: 20px; margin: 40px 0 12px; }
+  .sub { color: var(--muted); margin: 0; }
+  .status { margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .notice { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--warn);
+    border-radius: var(--radius); padding: 12px 16px; margin: 16px 0; }
+  .notice code { font-size: 13px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px;
+    padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  select, input { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    overflow: hidden; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
+  .card:hover { border-color: var(--accent); }
+  .thumb { aspect-ratio: 4/3; background: #fff center/contain no-repeat; position: relative; }
+  .badge { position: absolute; top: 8px; left: 8px; background: var(--good); color: #fff; font-weight: 700;
+    font-size: 13px; padding: 2px 8px; border-radius: 6px; }
+  .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .title { font-size: 14px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden; }
+  .price { font-size: 18px; font-weight: 700; margin-top: auto; }
+  .ref { font-size: 12px; color: var(--muted); }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+  .tag { background: var(--accent-weak); color: var(--accent); border-radius: 4px; padding: 1px 6px; }
+  .tag.auction { background: var(--good-weak); color: var(--good); }
+  .empty { color: var(--muted); padding: 24px 0; }
+
+  .tool { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .tool form { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tool input[name=q] { flex: 1 1 220px; }
+  .tool input[name=max] { width: 110px; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .links a, .btn { display: inline-block; padding: 7px 12px; border-radius: 8px; background: var(--accent-weak);
+    color: var(--accent); text-decoration: none; font-size: 14px; border: 0; font: inherit; cursor: pointer; }
+  .links a:hover { background: var(--accent); color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  td a { color: var(--accent); white-space: nowrap; margin-right: 10px; }
+  .tablewrap { overflow-x: auto; }
+
+  .tips { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .tips div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .tips h3 { margin: 0 0 6px; font-size: 15px; }
+  .tips p { margin: 0; color: var(--muted); font-size: 14px; }
+  footer { color: var(--muted); font-size: 13px; padding: 40px 0 32px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>eBay Schnäppchen</h1>
+    <p class="sub">Angebote, die deutlich unter dem üblichen Preis liegen – inkl. Versand, nur Artikelstandort Deutschland.</p>
+    <div class="status" id="status">Lade Angebote …</div>
+  </header>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <div class="controls">
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="controls">
+    <select id="type" aria-label="Angebotsformat">
+      <option value="all">Alle Formate</option>
+      <option value="bin">Nur Sofort-Kaufen</option>
+      <option value="auction">Nur Auktionen</option>
+    </select>
+    <select id="sort" aria-label="Sortierung">
+      <option value="discount">Größter Rabatt</option>
+      <option value="price">Niedrigster Preis</option>
+      <option value="ending">Endet bald</option>
+    </select>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <h2>Selbst suchen</h2>
+  <div class="tool">
+    <form id="linkform">
+      <input name="q" placeholder="z. B. lego technic konvolut" required>
+      <input name="max" type="number" min="1" placeholder="max. €">
+      <button class="btn" type="submit">Links erzeugen</button>
+    </form>
+    <div class="links" id="customlinks"></div>
+  </div>
+
+  <h2>Beobachtete Suchen</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Suche</th><th>Max.</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
+      <tbody id="searches"></tbody>
+    </table>
+  </div>
+
+  <h2>Was sich lohnt</h2>
+  <div class="tips">
+    <div><h3>Konvolute aufteilen</h3><p>LEGO, Playmobil, Spiele oder Bücher im Paket kaufen und einzeln verkaufen. Der Einzelwert ist oft das Zwei- bis Dreifache.</p></div>
+    <div><h3>„Defekt“ reparieren</h3><p>Smartphones, Dyson, Kaffeevollautomaten: oft ist nur Akku, Display oder Dichtung hin. Lohnt sich nur mit Erfahrung und Teilepreisen im Blick.</p></div>
+    <div><h3>Verkaufte Preise prüfen</h3><p>Nie nach Angebotspreisen kalkulieren. Der Link „Verkauft“ zeigt, was wirklich bezahlt wurde.</p></div>
+    <div><h3>Schlecht inseriert = billig</h3><p>Tippfehler im Titel, dunkle Fotos oder falsche Kategorie: solche Angebote finden weniger Bieter.</p></div>
+    <div><h3>Auktionen zur falschen Zeit</h3><p>Auktionen, die werktags vormittags oder nachts enden, gehen oft günstiger weg als am Sonntagabend.</p></div>
+    <div><h3>Abholung lokal</h3><p>„Nur Abholung“ schreckt die meisten Käufer ab: Möbel, Werkzeug, große Elektronik in der Nähe.</p></div>
+    <div><h3>Kosten ehrlich rechnen</h3><p>Versand, Verpackung, Zeit und Rücksendungen einplanen. Als gewerblicher Verkäufer fallen Gebühren, Gewährleistung und Steuern an.</p></div>
+    <div><h3>Finger weg</h3><p>Neue Markenware „zu billig“, Handys mit iCloud-Sperre, Tickets, Gutscheine: hohes Betrugs- und Fälschungsrisiko.</p></div>
+  </div>
+
+  <footer>
+    Daten über die eBay Browse API, aktualisiert per GitHub Action. „Üblicher Preis“ ist der Median der relevantesten
+    Sofort-Kaufen-Angebote zur gleichen Suche – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
+    und Verkäuferbewertung prüfen. Keine Verbindung zu eBay Inc.
+  </footer>
+</div>
+
+<script>
+const EBAY = "https://www.ebay.de/sch/i.html";
+const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
+const state = { search: "all", type: "all", sort: "discount", deals: [] };
+
+function ebayLinks(query, max) {
+  const base = { _nkw: query, LH_PrefLoc: "1" };
+  if (max) base._udhi = max;
+  const url = (extra) => EBAY + "?" + new URLSearchParams({ ...base, ...extra });
+  return [
+    ["Günstigste zuerst", url({ _sop: "15", LH_BIN: "1" })],
+    ["Auktionen enden bald", url({ _sop: "1", LH_Auction: "1" })],
+    ["Neu eingestellt", url({ _sop: "10" })],
+    ["Verkauft (echte Preise)", EBAY + "?" + new URLSearchParams({ _nkw: query, LH_Sold: "1", LH_Complete: "1", LH_PrefLoc: "1" })],
+  ];
+}
+
+function el(tag, attrs = {}, ...children) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "style") n.style.cssText = v; else if (v !== null && v !== undefined) n.setAttribute(k, v);
+  }
+  n.append(...children.filter((c) => c !== null && c !== undefined));
+  return n;
+}
+
+function timeLeft(iso) {
+  const ms = new Date(iso) - Date.now();
+  if (!(ms > 0)) return "beendet";
+  const h = Math.floor(ms / 3.6e6);
+  if (h >= 48) return `noch ${Math.floor(h / 24)} Tage`;
+  if (h >= 1) return `noch ${h} Std.`;
+  return `noch ${Math.max(1, Math.floor(ms / 6e4))} Min.`;
+}
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+  let list = state.deals.filter((d) =>
+    (state.search === "all" || d.search === state.search) &&
+    (state.type === "all" || (state.type === "auction") === d.auction) &&
+    (!d.endsAt || new Date(d.endsAt) > Date.now()));
+  const by = {
+    discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
+    price: (a, b) => a.total - b.total,
+    ending: (a, b) => (a.endsAt ? new Date(a.endsAt) : Infinity) - (b.endsAt ? new Date(b.endsAt) : Infinity),
+  };
+  list.sort(by[state.sort]);
+  grid.replaceChildren();
+  if (!list.length) {
+    grid.append(el("p", { class: "empty" }, state.deals.length
+      ? "Keine Angebote für diesen Filter."
+      : "Noch keine Angebote geladen. Die Links unten funktionieren trotzdem."));
+    return;
+  }
+  for (const d of list) {
+    const thumb = el("div", { class: "thumb", style: d.image ? `background-image:url("${encodeURI(d.image)}")` : "" },
+      d.discount > 0 ? el("span", { class: "badge" }, `−${d.discount} %`) : null);
+    const meta = el("div", { class: "meta" },
+      el("span", { class: "tag" + (d.auction ? " auction" : "") },
+        d.auction ? `Auktion · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
+      d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
+      d.condition ? el("span", { class: "tag" }, d.condition) : null);
+    grid.append(el("a", { class: "card", href: d.url, target: "_blank", rel: "noopener" },
+      thumb,
+      el("div", { class: "body" },
+        el("div", { class: "title" }, d.title),
+        meta,
+        el("div", { class: "price" }, eur.format(d.total)),
+        el("div", { class: "ref" }, d.reference ? `inkl. Versand · üblich ca. ${eur.format(d.reference)}` : "inkl. Versand"))));
+  }
+}
+
+function renderChips(searches) {
+  const chips = document.getElementById("chips");
+  const counts = {};
+  for (const d of state.deals) counts[d.search] = (counts[d.search] ?? 0) + 1;
+  const all = [["all", `Alle (${state.deals.length})`], ...searches.map((s) => [s.label, `${s.label} (${counts[s.label] ?? 0})`])];
+  chips.replaceChildren(...all.map(([key, text]) => {
+    const b = el("button", { class: "chip", "aria-pressed": String(state.search === key) }, text);
+    b.onclick = () => { state.search = key; renderChips(searches); renderGrid(); };
+    return b;
+  }));
+}
+
+function renderSearches(searches) {
+  document.getElementById("searches").replaceChildren(...searches.map((s) =>
+    el("tr", {},
+      el("td", {}, el("strong", {}, s.label), el("br"), el("span", { style: "color:var(--muted)" }, s.query)),
+      el("td", {}, eur.format(s.maxPrice)),
+      el("td", {}, s.note ?? ""),
+      el("td", {}, ...ebayLinks(s.query, s.maxPrice).map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t))))));
+}
+
+document.getElementById("type").onchange = (e) => { state.type = e.target.value; renderGrid(); };
+document.getElementById("sort").onchange = (e) => { state.sort = e.target.value; renderGrid(); };
+document.getElementById("linkform").onsubmit = (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  document.getElementById("customlinks").replaceChildren(...ebayLinks(f.get("q").trim(), f.get("max"))
+    .map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t)));
+};
+
+async function load() {
+  let data = { deals: [], searches: [], errors: [] };
+  try {
+    const res = await fetch("data/deals.json", { cache: "no-store" });
+    if (res.ok) data = await res.json();
+  } catch {}
+  if (!data.searches?.length) {
+    try { data.searches = (await (await fetch("searches.json")).json()).searches; } catch {}
+  }
+  state.deals = data.deals ?? [];
+  document.getElementById("status").textContent = data.updatedAt
+    ? `Stand: ${new Date(data.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · ${state.deals.length} Angebote`
+    : "Noch keine Daten.";
+  if (data.errors?.length) {
+    const n = document.getElementById("notice");
+    n.hidden = false;
+    n.append(el("strong", {}, "Hinweis: "), data.errors.join(" "));
+  }
+  renderChips(data.searches ?? []);
+  renderSearches(data.searches ?? []);
+  renderGrid();
+}
+load();
+</script>
+</body>
+</html>
