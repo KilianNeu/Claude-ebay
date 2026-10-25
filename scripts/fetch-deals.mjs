@@ -200,7 +200,10 @@ async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
   // Defekte Karten doppelt ausschließen: per Zustandsfilter in der Suche und hier per Zustand 7000
   // ("Als Ersatzteil / defekt") sowie per Ausschlusswörtern im Titel.
-  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && !excluded(i.title ?? "", terms));
+  // Nur Artikel, die laut eBay in Deutschland liegen – kein Zoll, keine Einfuhrumsatzsteuer.
+  const keep = (items) => items.filter((i) => i.conditionId !== "7000"
+    && (!i.itemLocation?.country || i.itemLocation.country === "DE")
+    && !excluded(i.title ?? "", terms));
   const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
     + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "");
 
