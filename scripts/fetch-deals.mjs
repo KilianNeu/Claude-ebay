@@ -17,6 +17,7 @@ const historyFile = process.env.HISTORY_FILE ?? new URL("../data/history.json", 
 const HOUR = 3.6e6, DAY = 24 * HOUR;
 const SOLD_WINDOW = 30 * DAY;     // Verkäufe der letzten 30 Tage zählen
 const MIN_SOLD = 5;               // ab so vielen Verkäufen ersetzt der Verkaufspreis den Angebotspreis
+const MIN_ASK = 5;                // weniger Angebote ergeben keinen verlässlichen Angebotspreis
 const MAX_CHECKS = 20;            // getItem-Prüfungen verschwundener Sofort-Kaufen-Angebote pro Lauf
 const MAX_AUCTION_CHECKS = 60;    // getItem-Abfragen beendeter Auktionen pro Lauf
 const now = Date.now();
@@ -285,8 +286,8 @@ async function dealsFor(token, s) {
   };
 
   let deals = [], cheapest = [];
-  // Ohne Referenz lässt sich kein Schnäppchen erkennen.
-  if (Number.isFinite(reference)) {
+  // Ohne verlässliche Referenz lässt sich kein Schnäppchen erkennen.
+  if (Number.isFinite(reference) && (useSold || refItems.length >= MIN_ASK)) {
     const floor = reference * (config.floorRatio ?? 0);
     const cap = s.maxPrice ?? reference * config.dealThreshold;
     cheapest = binOnly(keep(await search(token, {
