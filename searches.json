@@ -123,6 +123,77 @@
       "label": "RX 7800 XT",
       "query": "rx 7800 xt",
       "note": "Aktuelle AMD-Mittelklasse"
+    },
+    {
+      "label": "RTX 5060",
+      "query": "rtx 5060",
+      "exclude": [
+        "ti",
+        "5060ti",
+        "laptop"
+      ],
+      "note": "Neueste Einsteigerklasse"
+    },
+    {
+      "label": "RTX 5060 Ti",
+      "query": "rtx 5060 ti",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "8 GB und 16 GB Versionen – Titel genau lesen"
+    },
+    {
+      "label": "RTX 5070",
+      "query": "rtx 5070",
+      "exclude": [
+        "ti",
+        "5070ti",
+        "laptop"
+      ],
+      "note": "Aktuelle Mittelklasse, hohe Nachfrage"
+    },
+    {
+      "label": "RTX 5070 Ti",
+      "query": "rtx 5070 ti",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "16 GB, beliebt bei Enthusiasten"
+    },
+    {
+      "label": "RTX 5080",
+      "query": "rtx 5080",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "High-End, hohe absolute Spanne"
+    },
+    {
+      "label": "RTX 5090",
+      "query": "rtx 5090",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "Topmodell – nur mit Rechnung kaufen, Betrugsrisiko hoch"
+    },
+    {
+      "label": "RX 9060 XT",
+      "query": "rx 9060 xt",
+      "note": "Neueste AMD-Einsteigerklasse, 8 GB und 16 GB"
+    },
+    {
+      "label": "RX 9070",
+      "query": "rx 9070",
+      "exclude": [
+        "xt",
+        "9070xt"
+      ],
+      "note": "Neueste AMD-Mittelklasse"
+    },
+    {
+      "label": "RX 9070 XT",
+      "query": "rx 9070 xt",
+      "note": "AMDs aktuelles Spitzenmodell"
     }
   ]
 }
