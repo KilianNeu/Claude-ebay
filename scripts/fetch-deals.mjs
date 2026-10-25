@@ -84,7 +84,8 @@ function toDeal(item, s, reference) {
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
   const keep = (items) => items.filter((i) => !excluded(i.title ?? "", terms));
-  const where = `priceCurrency:${config.currency},itemLocationCountry:DE`;
+  const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
+    + (config.condition ? `,conditions:{${config.condition}}` : "");
 
   // Referenzpreis: Median der relevantesten Sofortkauf-Angebote (ohne Zubehör, Defekte usw.).
   const refItems = keep(await search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }));
