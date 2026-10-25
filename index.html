@@ -82,8 +82,10 @@
   .tips p { margin: 0; color: var(--muted); font-size: 14px; }
   footer { color: var(--muted); font-size: 13px; padding: 40px 0 32px; }
   /* Preisstatistik */
-  .viz { --series-1: #2a78d6; --series-2: #eb6834; --grid: #e6e7ea; }
-  @media (prefers-color-scheme: dark) { .viz { --series-1: #3987e5; --series-2: #d95926; --grid: #2c313a; } }
+  .viz { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --grid: #e6e7ea; }
+  @media (prefers-color-scheme: dark) { .viz { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --grid: #2c313a; } }
+  #binchart { width: 100%; height: 240px; display: block; touch-action: pan-y; }
+  #binchart text { fill: var(--muted); font-size: 11px; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
   .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
   .tile .k { font-size: 12px; color: var(--muted); }
@@ -96,7 +98,7 @@
   #chart { width: 100%; height: 260px; display: block; touch-action: pan-y; }
   #chart text { fill: var(--muted); font-size: 11px; }
   .tip { position: absolute; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12px;
-    padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); }
+    padding: 6px 8px; border-radius: 6px; width: max-content; max-width: min(300px, 90%); transform: translate(-50%, -100%); }
   .empty-chart { color: var(--muted); padding: 40px 0; text-align: center; }
   .sales td { font-variant-numeric: tabular-nums; }
   /* Reiter */
@@ -199,6 +201,17 @@
       <svg id="chart" role="img" aria-label="Preisverlauf"></svg>
       <div class="tip" id="tip" hidden></div>
     </div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Preisverlauf Sofort-Kaufen</h3>
+    <div class="chartbox">
+      <div class="legend">
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round"/></svg>Median</span>
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-3)" stroke-width="2" stroke-linecap="round"/></svg>Günstigstes Viertel (Referenz)</span>
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-2)" stroke-width="2" stroke-dasharray="5 4"/></svg>Günstigstes Angebot</span>
+      </div>
+      <svg id="binchart" role="img" aria-label="Preisverlauf der Sofort-Kaufen-Angebote"></svg>
+      <div class="tip" id="bintip" hidden></div>
+    </div>
+
     <h3 style="font-size:15px;margin:20px 0 8px">Letzte Verkäufe</h3>
     <div class="tablewrap">
       <table class="sales">
@@ -433,24 +446,11 @@ function renderStats() {
       el("td", {}, el("a", { href: itemUrl(x.id), target: "_blank", rel: "noopener" }, "ansehen"))))
     : [el("tr", {}, el("td", { colspan: "4", style: "color:var(--muted)" }, "Noch keine Verkäufe beobachtet – die Historie füllt sich mit jeder Stunde."))]));
   drawChart(m);
+  drawBinChart(m);
 }
 
-function drawChart(m) {
-  const svg = document.getElementById("chart"), tip = document.getElementById("tip");
-  svg.replaceChildren(); tip.hidden = true;
-  const W = svg.clientWidth || 600, H = 260, pad = { l: 52, r: 12, t: 10, b: 24 };
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const line = m.series.filter((p) => p[1] != null);
-  const dots = m.sales.filter((x) => x.t >= (line[0]?.[0] ?? 0) - 7 * 864e5);
-  if (line.length + dots.length < 2) {
-    for (const [i, line] of ["Noch zu wenig Daten.", "Der Verlauf wächst mit jedem stündlichen Lauf."].entries()) {
-      const t = svgEl("text", { x: W / 2, y: H / 2 + i * 18, "text-anchor": "middle" });
-      t.textContent = line; svg.append(t);
-    }
-    return;
-  }
-  const ts = [...line.map((p) => p[0]), ...dots.map((d) => d.t)];
-  const vs = [...line.map((p) => p[1]), ...dots.map((d) => d.price)];
+// Achsen und Gitter für ein Preisdiagramm zeichnen; liefert die Skalen X (Zeit) und Y (Euro).
+function frame(svg, W, H, pad, ts, vs) {
   let [x0, x1] = [Math.min(...ts), Math.max(...ts)];
   if (x1 - x0 < 36e5) { x0 -= 18e5; x1 += 18e5; }
   // y-Achse mit runden Schritten, nicht bei 0 beginnend (Preisniveau, keine Mengen)
@@ -459,7 +459,6 @@ function drawChart(m) {
   const y0 = Math.floor((rawLo - span * 0.1) / step) * step, y1 = Math.ceil((rawHi + span * 0.1) / step) * step;
   const X = (t) => pad.l + (t - x0) / (x1 - x0) * (W - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - y0) / (y1 - y0)) * (H - pad.t - pad.b);
-
   for (let v = y0; v <= y1; v += step) {
     svg.append(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }));
     const t = svgEl("text", { x: pad.l - 6, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = eur.format(v).replace(",00", ""); svg.append(t);
@@ -471,6 +470,76 @@ function drawChart(m) {
     const lbl = svgEl("text", { x: X(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" });
     lbl.textContent = dateFmt(t, days < 3); svg.append(lbl);
   }
+  return { X, Y };
+}
+
+function emptyChart(svg, W, H) {
+  for (const [i, line] of ["Noch zu wenig Daten.", "Der Verlauf wächst mit jedem stündlichen Lauf."].entries()) {
+    const t = svgEl("text", { x: W / 2, y: H / 2 + i * 18, "text-anchor": "middle" });
+    t.textContent = line; svg.append(t);
+  }
+}
+
+// Tooltip im Diagrammrahmen an einen Punkt im SVG-Koordinatensystem setzen.
+function placeTip(svg, tip, W, H, x, y) {
+  const r = svg.getBoundingClientRect(), pr = svg.parentElement.getBoundingClientRect();
+  const sx = r.left - pr.left + x * r.width / W, sy = r.top - pr.top + y * r.height / H;
+  const half = tip.offsetWidth / 2;
+  tip.style.left = `${Math.min(Math.max(sx, half + 4), pr.width - half - 4)}px`;
+  tip.style.top = `${sy - 10}px`;
+}
+
+// Preisverlauf der Sofort-Kaufen-Angebote: Median, günstigstes Viertel und günstigstes Angebot.
+function drawBinChart(m) {
+  const svg = document.getElementById("binchart"), tip = document.getElementById("bintip");
+  svg.replaceChildren(); tip.hidden = true;
+  const W = svg.clientWidth || 600, H = 240, pad = { l: 52, r: 64, t: 10, b: 24 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const pts = m.series.filter((p) => p[1] != null);
+  if (pts.length < 2) return emptyChart(svg, W, H);
+  const lines = [
+    { idx: 1, name: "Median", color: "var(--series-1)" },
+    { idx: 4, name: "Günstigstes Viertel", color: "var(--series-3)" },
+    { idx: 3, name: "Günstigstes", color: "var(--series-2)", dash: "5 4" },
+  ];
+  const vs = pts.flatMap((p) => lines.map((l) => p[l.idx]).filter((v) => v != null));
+  const { X, Y } = frame(svg, W, H, pad, pts.map((p) => p[0]), vs);
+  for (const l of lines) {
+    const seg = pts.filter((p) => p[l.idx] != null);
+    if (seg.length < 2) continue;
+    svg.append(svgEl("path", { d: seg.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[l.idx]).toFixed(1)}`).join(""),
+      fill: "none", stroke: l.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", ...(l.dash ? { "stroke-dasharray": l.dash } : {}) }));
+    // Direktes Label am Linienende (Text in Textfarbe, Farbe nur am Marker)
+    const lastP = seg.at(-1);
+    svg.append(svgEl("circle", { cx: X(lastP[0]), cy: Y(lastP[l.idx]), r: 3.5, fill: l.color }));
+    const t = svgEl("text", { x: X(lastP[0]) + 7, y: Y(lastP[l.idx]) + 4 }); t.textContent = euro0(lastP[l.idx]); svg.append(t);
+  }
+  const cross = svgEl("line", { y1: pad.t, y2: H - pad.b, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+  svg.append(cross);
+  const hide = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); };
+  svg.onpointerleave = hide;
+  svg.onpointermove = (e) => {
+    const r = svg.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width;
+    const p = pts.reduce((a, b) => Math.abs(X(b[0]) - mx) < Math.abs(X(a[0]) - mx) ? b : a);
+    cross.setAttribute("x1", X(p[0])); cross.setAttribute("x2", X(p[0])); cross.setAttribute("visibility", "visible");
+    tip.textContent = `${dateFmt(p[0], true)} · Median ${euro0(p[1])}` + (p[4] != null ? ` · Viertel ${euro0(p[4])}` : "")
+      + (p[3] != null ? ` · ab ${euro0(p[3])}` : "") + ` · ${p[2]} Angebote`;
+    tip.hidden = false;
+    placeTip(svg, tip, W, H, X(p[0]), Y(p[1]));
+  };
+}
+
+function drawChart(m) {
+  const svg = document.getElementById("chart"), tip = document.getElementById("tip");
+  svg.replaceChildren(); tip.hidden = true;
+  const W = svg.clientWidth || 600, H = 260, pad = { l: 52, r: 12, t: 10, b: 24 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const line = m.series.filter((p) => p[1] != null);
+  const dots = m.sales.filter((x) => x.t >= (line[0]?.[0] ?? 0) - 7 * 864e5);
+  if (line.length + dots.length < 2) return emptyChart(svg, W, H);
+  const ts = [...line.map((p) => p[0]), ...dots.map((d) => d.t)];
+  const vs = [...line.map((p) => p[1]), ...dots.map((d) => d.price)];
+  const { X, Y } = frame(svg, W, H, pad, ts, vs);
   if (line.length > 1) {
     svg.append(svgEl("path", { d: line.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(""),
       fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
@@ -501,11 +570,7 @@ function drawChart(m) {
     cross.setAttribute("x1", best.x); cross.setAttribute("x2", best.x); cross.setAttribute("visibility", "visible");
     ring.setAttribute("cx", best.x); ring.setAttribute("cy", best.y); ring.setAttribute("visibility", "visible");
     tip.textContent = best.html; tip.hidden = false;
-    const pr = svg.parentElement.getBoundingClientRect();
-    const sx = r.left - pr.left + best.x * r.width / W, sy = r.top - pr.top + best.y * r.height / H;
-    const half = tip.offsetWidth / 2, box = pr.width;
-    tip.style.left = `${Math.min(Math.max(sx, half + 4), box - half - 4)}px`;
-    tip.style.top = `${sy - 10}px`;
+    placeTip(svg, tip, W, H, best.x, best.y);
   };
 }
 

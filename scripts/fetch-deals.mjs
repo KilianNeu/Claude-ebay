@@ -26,7 +26,7 @@ const now = Date.now();
 const statsFile = new URL("../data/stats.json", import.meta.url);
 
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
-history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot], ...]
+history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot, 25-%-Quantil], ...]
 // Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
 // (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
 const HISTORY_VERSION = 2;
@@ -281,7 +281,7 @@ async function dealsFor(token, s) {
   const all = priceStats(refItems), used = priceStats(refItems.filter((i) => !isNew(i))), fresh = priceStats(refItems.filter(isNew));
   const askMedian = all.median;
   if (Number.isFinite(askMedian)) {
-    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(all.min)]);
+    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(all.min), round(all.p25)]);
   }
   const sold = soldStats(s.label);
   const { soldMedian, soldCount } = sold;
@@ -350,15 +350,16 @@ function prune() {
 function buildStats() {
   return config.searches.map((s) => {
     const buckets = new Map();
-    for (const [t, ask, count, min] of history.snapshots[s.label] ?? []) {
+    for (const [t, ask, count, min, p25] of history.snapshots[s.label] ?? []) {
       const key = t < now - 3 * DAY ? Math.floor(t / DAY) * DAY + DAY / 2 : Math.floor(t / HOUR) * HOUR;
-      const b = buckets.get(key) ?? { ask: [], count: [], min: [] };
+      const b = buckets.get(key) ?? { ask: [], count: [], min: [], p25: [] };
       b.ask.push(ask); b.count.push(count);
+      if (Number.isFinite(p25)) b.p25.push(p25);
       if (min >= ask * (config.floorRatio ?? 0)) b.min.push(min); // ältere Ausreißer ignorieren
       buckets.set(key, b);
     }
     const series = [...buckets].sort((a, b) => a[0] - b[0])
-      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(median(b.min))]);
+      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(median(b.min)), round(median(b.p25))]);
     const sales = history.sold.filter((x) => x.model === s.label)
       .map((x) => ({ t: x.at, price: x.price, kind: x.kind, id: x.id }))
       .sort((a, b) => b.t - a.t);
