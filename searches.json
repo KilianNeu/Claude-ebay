@@ -245,12 +245,22 @@
       "note": "Neueste Einsteigerklasse"
     },
     {
-      "label": "RTX 5060 Ti",
+      "label": "RTX 5060 Ti 8GB",
       "query": "rtx 5060 ti",
+      "memory": 8,
       "exclude": [
         "laptop"
       ],
-      "note": "8 GB und 16 GB Versionen – Titel genau lesen"
+      "note": "Günstige Variante, weniger gefragt"
+    },
+    {
+      "label": "RTX 5060 Ti 16GB",
+      "query": "rtx 5060 ti",
+      "memory": 16,
+      "exclude": [
+        "laptop"
+      ],
+      "note": "Die gefragte Variante – auf „16 GB“ im Titel achten"
     },
     {
       "label": "RTX 5070",
@@ -287,9 +297,16 @@
       "note": "Topmodell – nur mit Rechnung kaufen, Betrugsrisiko hoch"
     },
     {
-      "label": "RX 9060 XT",
+      "label": "RX 9060 XT 8GB",
       "query": "rx 9060 xt",
-      "note": "Neueste AMD-Einsteigerklasse, 8 GB und 16 GB"
+      "memory": 8,
+      "note": "Günstige Variante"
+    },
+    {
+      "label": "RX 9060 XT 16GB",
+      "query": "rx 9060 xt",
+      "memory": 16,
+      "note": "Mehr Speicher, besser wiederverkäuflich"
     },
     {
       "label": "RX 9070",

@@ -115,7 +115,12 @@ const median = (values) => quantile(values, 0.5);
 // sind optional.
 function modelPattern(s) {
   const tokens = s.query.toLowerCase().split(/\s+/).filter((t) => !/^(rtx|rx|gtx|\d+gb)$/.test(t));
-  return new RegExp(`(^|[^0-9])${tokens.join("[\\s-]*")}([^a-z0-9]|$)`); // "RTX4080" zulassen
+  const model = new RegExp(`(^|[^0-9])${tokens.join("[\\s-]*")}([^a-z0-9]|$)`); // "RTX4080" zulassen
+  if (!s.memory) return model;
+  // Speichervarianten (z. B. 5060 Ti 8 GB / 16 GB): die Größe muss im Titel stehen, die andere nicht.
+  const mem = (gb) => new RegExp(`(^|[^0-9])${gb}\\s*g(b)?([^a-z0-9]|$)|o${gb}g([^a-z0-9]|$)`);
+  const others = [8, 12, 16].filter((gb) => gb !== s.memory).map(mem);
+  return { test: (t) => model.test(t) && mem(s.memory).test(t) && !others.some((o) => o.test(t)) };
 }
 
 // Unseriöse Verkäufer ausschließen: neue Konten mit kaum Bewertungen und Verkäufer mit zu
@@ -271,7 +276,7 @@ async function dealsFor(token, s) {
   const priceStats = (items) => {
     const m = median(items.map(totalPrice));
     const v = items.map(totalPrice).filter((x) => x >= m * (config.floorRatio ?? 0));
-    return { count: items.length, median: m, min: quantile(v, 0), max: quantile(v, 1), avg: v.reduce((a, b) => a + b, 0) / v.length };
+    return { count: items.length, median: m, p25: quantile(v, 0.25), min: quantile(v, 0), max: quantile(v, 1), avg: v.reduce((a, b) => a + b, 0) / v.length };
   };
   const all = priceStats(refItems), used = priceStats(refItems.filter((i) => !isNew(i))), fresh = priceStats(refItems.filter(isNew));
   const askMedian = all.median;
@@ -282,11 +287,13 @@ async function dealsFor(token, s) {
   const { soldMedian, soldCount } = sold;
   const useSold = soldCount >= MIN_SOLD;
   // Referenz je Zustand: Verkaufspreis, sonst Angebotsmedian der eigenen Gruppe, sonst aller Angebote.
-  const askRef = (group) => group.count >= MIN_ASK ? group.median : all.count >= MIN_ASK ? all.median : NaN;
+  // Angebotsreferenz ist das günstigste Viertel (25-%-Quantil): überteuerte Händlerangebote, die nie
+  // verkauft werden, verzerren sonst den Wert. Angebotspreise liegen ohnehin über den Verkaufspreisen.
+  const askRef = (group) => group.count >= MIN_ASK ? group.p25 : all.count >= MIN_ASK ? all.p25 : NaN;
   const refFor = (i) => useSold ? soldMedian : askRef(isNew(i) ? fresh : used);
   const market = {
     label: s.label, basis: useSold ? "sold" : "ask",
-    askCount: all.count, askMedian: round(all.median), askMin: round(all.min), askMax: round(all.max), askAvg: round(all.avg),
+    askCount: all.count, askMedian: round(all.median), askP25: round(all.p25), askMin: round(all.min), askMax: round(all.max), askAvg: round(all.avg),
     usedCount: used.count, usedMedian: round(used.median), newCount: fresh.count, newMedian: round(fresh.median),
     soldCount, soldMedian: round(soldMedian), soldAvg: round(sold.soldAvg),
     soldMin: round(sold.soldMin), soldP25: round(sold.soldP25), soldP75: round(sold.soldP75), soldMax: round(sold.soldMax),

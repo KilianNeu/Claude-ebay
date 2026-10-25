@@ -208,7 +208,8 @@
   <h2>Marktpreise</h2>
   <p class="sub" style="margin-bottom:12px">„Verkauft“ ist der Median der letzten 30 Tage aus eigener Beobachtung: Endpreise beendeter Auktionen
     und beendete Sofort-Kaufen-Angebote (Preisvorschläge nicht sichtbar, daher eher etwas zu hoch).
-    Ab 5 Verkäufen ist er die Referenz für Schnäppchen, sonst der Angebotspreis.</p>
+    Ab 5 Verkäufen ist er die Referenz für Schnäppchen, sonst das günstigste Viertel der Angebote
+    (neu und gebraucht getrennt), weil überteuerte Händlerangebote den Median verzerren.</p>
   <div class="tablewrap">
     <table>
       <thead><tr><th>Modell</th><th>Verkauft</th><th>Angebote</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
@@ -296,7 +297,7 @@ function renderGrid() {
         el("div", { class: "title" }, d.title),
         meta,
         el("div", { class: "price" }, eur.format(d.total)),
-        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : d.isNew ? "neu angeboten" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"),
+        el("div", { class: "ref" }, d.reference ? `inkl. Versand · Marktpreis ca. ${eur.format(d.reference)} (${d.basis === "sold" ? "verkauft" : `günstigstes Viertel ${d.isNew ? "neu" : "gebraucht"}`})` : "inkl. Versand"),
         marketBlock(d))));
   }
 }
