@@ -102,12 +102,29 @@
       "note": "Preis-Leistungs-Tipp der 40er-Serie"
     },
     {
+      "label": "RTX 4070 Ti",
+      "query": "rtx 4070 ti",
+      "exclude": [
+        "super",
+        "laptop"
+      ],
+      "note": "12 GB, schneller als 4070 Super"
+    },
+    {
       "label": "RTX 4080",
       "query": "rtx 4080",
       "exclude": [
         "laptop"
       ],
       "note": "Hoher Preis, also auch hohe absolute Spanne"
+    },
+    {
+      "label": "RTX 4090",
+      "query": "rtx 4090",
+      "exclude": [
+        "laptop"
+      ],
+      "note": "Weiterhin sehr gefragt (KI, 4K) – nur mit Rechnung kaufen"
     },
     {
       "label": "RX 6700 XT",
