@@ -46,6 +46,8 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
 - `exclude` – Wörter, die nie im Titel vorkommen dürfen (ganze Wörter)
 - `minSellerFeedback: 10`, `minSellerPositive: 97` – Verkäufer mit weniger Bewertungen oder
   weniger positiven Bewertungen werden ausgeschlossen
+- `resale` – Kosten beim Weiterverkauf für die Gewinnrechnung: Versand, Verpackung und Gebührensatz
+  (Gebühren nur, wenn auf der Seite „Gewerblich verkaufen“ angehakt ist)
 - `excludeParts` – Wortteile, die auch in Zusammensetzungen greifen (z. B. „Kühlkörper“ in „Lüfter+Kühlkörper“)
 - `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
 - `conditionIds` – neue, gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist

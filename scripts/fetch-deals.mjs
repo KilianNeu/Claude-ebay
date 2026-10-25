@@ -180,11 +180,18 @@ function remember(items, s) {
   for (const i of items) {
     const auction = i.buyingOptions?.includes("AUCTION") ?? false;
     const prev = history.listings[i.itemId];
+    const price = Math.round(totalPrice(i) * 100) / 100;
+    // Preissenkungen bei Sofortkäufen mitzählen (bei Auktionen steigt der Preis durch Gebote).
+    const dropped = !auction && prev && !prev.auction && price < prev.price - 0.5;
     history.listings[i.itemId] = {
       model: s.label,
       title: i.title,
       auction,
-      price: Math.round(totalPrice(i) * 100) / 100,
+      price,
+      firstPrice: prev?.firstPrice ?? prev?.price ?? price,
+      drops: (prev?.drops ?? 0) + (dropped ? 1 : 0),
+      lastDrop: dropped ? now : prev?.lastDrop ?? null,
+      created: i.itemCreationDate ?? prev?.created ?? null,
       bids: auction ? i.bidCount ?? 0 : null,
       endsAt: i.itemEndDate ?? null,
       firstSeen: prev?.firstSeen ?? now,
@@ -271,6 +278,27 @@ function soldStats(label) {
 
 const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 
+// Nachfrage: Verkäufe der letzten 7 Tage und Anteil verkaufter Auktionen (30 Tage).
+// observedDays sagt, wie lange schon beobachtet wird – am Anfang ist die Woche noch unvollständig.
+function demand(label) {
+  const snaps = history.snapshots[label] ?? [];
+  const observedDays = snaps.length ? (now - snaps[0][0]) / DAY : 0;
+  const week = history.sold.filter((x) => x.model === label && x.at > now - 7 * DAY).length;
+  const ended = history.ended.filter((x) => x.model === label && x.at > now - SOLD_WINDOW && x.result !== "unknown");
+  const sold = ended.filter((x) => x.result === "sold").length;
+  return { salesWeek: week, auctionsEnded: ended.length, auctionsSold: sold, observedDays: Math.round(observedDays * 10) / 10 };
+}
+
+// Trend des günstigsten verfügbaren Sofortkaufs: jetzt gegenüber vor 7 Tagen (bzw. Beobachtungsbeginn).
+function trend(label, current) {
+  const snaps = (history.snapshots[label] ?? []).filter((x) => x[3] != null);
+  if (!snaps.length || !Number.isFinite(current)) return null;
+  const target = now - 7 * DAY;
+  const past = snaps.reduce((a, b) => Math.abs(b[0] - target) < Math.abs(a[0] - target) ? b : a);
+  if (now - past[0] < 6 * HOUR) return null; // zu kurz beobachtet
+  return { from: past[3], to: round(current), days: Math.round((now - past[0]) / DAY * 10) / 10 };
+}
+
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
   // Defekte Karten doppelt ausschließen: per Zustandsfilter in der Suche und hier per Zustand 7000
@@ -330,19 +358,26 @@ async function dealsFor(token, s) {
     cheapest = binOnly(keep(await search(token, {
       q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "50",
     })));
+    remember(cheapest, s);
     const seen = new Set();
     deals = [...cheapest, ...ending]
       .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
       .map((i) => ({ i, ref: refFor(i) }))
       .filter(({ ref }) => Number.isFinite(ref))
-      .map(({ i, ref }) => ({ ...toDeal(i, s, ref), basis: market.basis, isNew: isNew(i) }))
+      .map(({ i, ref }) => {
+        const h = history.listings[i.itemId];
+        return {
+          ...toDeal(i, s, ref), basis: market.basis, isNew: isNew(i),
+          // Preissenkungen und Alter des Angebots (aus eigener Beobachtung bzw. eBay-Einstelldatum)
+          priceHistory: h && h.drops ? { first: h.firstPrice, drops: h.drops, lastDrop: h.lastDrop } : null,
+          listedSince: i.itemCreationDate ?? h?.created ?? null, firstSeen: h?.firstSeen ?? now,
+        };
+      })
       .filter((d) => Number.isFinite(d.total) && d.total >= d.reference * (config.floorRatio ?? 0)
         && d.total <= (s.maxPrice ?? d.reference * config.dealThreshold))
       .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
       .slice(0, config.maxItemsPerSearch);
   }
-
-  remember(cheapest, s);
 
   // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze), neu oder gebraucht.
   const bin = [...refItems, ...cheapest]
@@ -350,6 +385,7 @@ async function dealsFor(token, s) {
     .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
     .sort((a, b) => a.price - b.price)[0];
   if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
+  Object.assign(market, demand(s.label), { trend: trend(s.label, bin?.price) });
 
   // Verlauf: Median, Anzahl, günstigstes verfügbares Angebot (aus der preissortierten Suche) und Viertel.
   if (Number.isFinite(askMedian)) {
@@ -419,7 +455,7 @@ function buildStats() {
 
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = process.env;
 const result = {
-  updatedAt: new Date().toISOString(), dealThreshold: config.dealThreshold, searches: config.searches, markets: [], deals: [], errors: [],
+  updatedAt: new Date().toISOString(), dealThreshold: config.dealThreshold, resale: config.resale, searches: config.searches, markets: [], deals: [], errors: [],
 };
 
 if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {

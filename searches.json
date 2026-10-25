@@ -8,6 +8,11 @@
   "floorRatio": 0.4,
   "minSellerFeedback": 10,
   "minSellerPositive": 97,
+  "resale": {
+    "shipping": 7,
+    "packaging": 3,
+    "feeRate": 0.11
+  },
   "exclude": [
     "defekt",
     "bastler",

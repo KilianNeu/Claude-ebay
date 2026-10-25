@@ -109,15 +109,23 @@
   [role="tabpanel"] > h2:first-child { margin-top: 0; }
 
   /* Marktdaten auf den Karten */
-  .mk { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; display: grid; gap: 4px; font-size: 12px; }
-  .mkrow { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); }
-  .mkrow b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mk { min-width: 0; border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; display: grid; gap: 4px; font-size: 12px; }
+  .mkrow { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 8px; color: var(--muted); }
+  .mkrow b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: auto; text-align: right; }
   .range { position: relative; height: 14px; margin: 2px 0; }
   .range .track { position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--border); border-radius: 1px; }
   .range .band { position: absolute; top: 4px; height: 6px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 3px; }
   .range .mark { position: absolute; top: 1px; width: 3px; height: 12px; margin-left: -1.5px; background: var(--text); border-radius: 2px; }
   .hint { color: var(--text); }
   .hint.good { color: var(--good); font-weight: 600; }
+  .hint.bad { color: var(--warn); font-weight: 600; }
+  .profit { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px;
+    padding: 6px 8px; border-radius: 6px; background: var(--good-weak); }
+  .profit b { font-size: 15px; font-variant-numeric: tabular-nums; }
+  .profit.neg { background: transparent; border: 1px solid var(--border); }
+  .profit .why { display: block; font-size: 11px; color: var(--muted); }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .tag.drop { background: var(--good-weak); color: var(--good); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -151,7 +159,9 @@
       <option value="discount">Größter Rabatt</option>
       <option value="price">Niedrigster Preis</option>
       <option value="ending">Endet bald</option>
+      <option value="profit">Größter Gewinn</option>
     </select>
+    <label class="toggle"><input type="checkbox" id="business"> Gewerblich verkaufen (eBay-Gebühren)</label>
   </div>
   <div class="grid" id="grid"></div>
 
@@ -250,7 +260,7 @@
 <script>
 const EBAY = "https://www.ebay.de/sch/i.html";
 const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-const state = { search: "all", type: "all", sort: "discount", deals: [], markets: {}, dealThreshold: 0.85 };
+const state = { search: "all", type: "all", sort: "discount", deals: [], markets: {}, dealThreshold: 0.85, resale: { shipping: 7, packaging: 3, feeRate: 0.11 }, business: false };
 
 function ebayLinks(query, max) {
   const base = { _nkw: query, LH_PrefLoc: "1" };
@@ -292,6 +302,7 @@ function renderGrid() {
     discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
     price: (a, b) => a.total - b.total,
     ending: (a, b) => (a.endsAt ? new Date(a.endsAt) : Infinity) - (b.endsAt ? new Date(b.endsAt) : Infinity),
+    profit: (a, b) => (profitOf(b)?.value ?? -Infinity) - (profitOf(a)?.value ?? -Infinity),
   };
   list.sort(by[state.sort]);
   grid.replaceChildren();
@@ -310,6 +321,9 @@ function renderGrid() {
       d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
       d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
       d.alsoBuyItNow ? el("span", { class: "tag" }, "auch Sofort-Kaufen") : null,
+      d.priceHistory ? el("span", { class: "tag drop", title: `${d.priceHistory.drops}× gesenkt` },
+        `Preis gesenkt: ${euro0(d.priceHistory.first)} → ${euro0(d.total)}`) : null,
+      ageTag(d),
       d.condition ? el("span", { class: "tag" }, d.condition) : null,
       d.location ? el("span", { class: "tag" }, d.location === "DE" ? "aus Deutschland" : d.location) : null,
       d.seller?.score != null ? el("span", { class: "tag" }, `Verkäufer: ${d.seller.score} Bew.${d.seller.positive ? ` · ${String(d.seller.positive).replace(".", ",")} %` : ""}`) : null);
@@ -331,6 +345,31 @@ const euro0 = (v) => eur.format(v).replace(",00", "");
 
 // Marktdaten des Modells für eine Angebotskarte: Verkäufe und Angebote (Min/Ø/Median/Max),
 // Lage des Preises in der Spanne und bei Auktionen Luft bis zum Marktpreis plus Maximalgebot.
+// Erwarteter Gewinn beim Weiterverkauf: Verkaufspreis (Median der Verkäufe, sonst Referenz)
+// minus Kaufpreis, Versand und Verpackung beim Weiterverkauf und ggf. eBay-Gebühren.
+function profitOf(d) {
+  const m = state.markets[d.search];
+  const resale = m?.soldCount >= 3 ? m.soldMedian : d.reference;
+  if (!resale) return null;
+  const r = state.resale, fee = state.business ? resale * r.feeRate : 0;
+  const value = resale - fee - r.shipping - r.packaging - d.total;
+  return { value, resale, fee, basis: m?.soldCount >= 3 ? `Median von ${m.soldCount} Verkäufen` : "Marktpreis-Schätzung" };
+}
+
+function ageTag(d) {
+  const since = d.listedSince ? Date.parse(d.listedSince) : null;
+  if (!since || d.auction) return null;
+  const days = Math.floor((Date.now() - since) / 864e5);
+  return days >= 14 ? el("span", { class: "tag", title: "Lange online – Preisvorschlag hat gute Chancen" }, `online seit ${days} Tagen`) : null;
+}
+
+function trendText(t) {
+  if (!t) return null;
+  const diff = t.to - t.from, span = t.days >= 6.5 ? "7 Tage" : t.days >= 1 ? `${Math.round(t.days)} Tage` : "seit heute";
+  if (Math.abs(diff) < 3) return { text: `→ stabil (${span})`, cls: "" };
+  return diff < 0 ? { text: `↓ ${euro0(-diff)} günstiger (${span})`, cls: "" } : { text: `↑ ${euro0(diff)} teurer (${span})`, cls: "" };
+}
+
 function marketBlock(d) {
   const m = state.markets[d.search];
   if (!m) return null;
@@ -344,10 +383,7 @@ function marketBlock(d) {
     m.cheapestBin.url === d.url
       ? el("b", {}, `${euro0(m.cheapestBin.price)} (dieses)`)
       : el("a", { href: m.cheapestBin.url, target: "_blank", rel: "noopener", title: m.cheapestBin.title }, `${euro0(m.cheapestBin.price)} ansehen ›`)));
-  if (m.usedCount && m.newCount) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Angebote gebraucht / neu"),
-    el("b", {}, `${m.usedMedian != null ? euro0(m.usedMedian) : "–"} (${m.usedCount}×) / ${euro0(m.newMedian)} (${m.newCount}×)`)));
-  rows.push(el("div", { class: "mkrow" }, el("span", {}, "Median verkauft / angeboten"),
-    el("b", {}, `${hasSold ? euro0(m.soldMedian) : "–"} / ${m.askMedian != null ? euro0(m.askMedian) : "–"}`)));
+  if (hasSold) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Median verkauft"), el("b", {}, euro0(m.soldMedian))));
 
   // Spannenbalken: Min–Max (Verkäufe, sonst Angebote), Band = mittlere 50 % der Verkäufe
   const lo = Math.min(hasSold ? m.soldMin : m.askMin, d.total), hi = Math.max(hasSold ? m.soldMax : m.askMax, d.total);
@@ -371,6 +407,25 @@ function marketBlock(d) {
     rows.push(el("div", { class: "hint" }, room > 0 ? `Bis Marktpreis noch ${euro0(room)} Luft` : "Gebot liegt schon über dem Marktpreis"));
     if (maxBid > 0) rows.push(el("div", { class: "hint good" }, `Lohnendes Maximalgebot: ${euro0(maxBid)}`
       + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")));
+  }
+  // Nachfrage: wie schnell verkauft sich das Modell?
+  const auc = m.auctionsEnded ? ` · ${Math.round(m.auctionsSold / m.auctionsEnded * 100)} % der Auktionen verkauft` : "";
+  rows.push(el("div", { class: "mkrow" }, el("span", {}, "Nachfrage"),
+    el("b", {}, `${m.salesWeek ?? 0} Verkäufe/Woche${auc}`)));
+  if (m.observedDays != null && m.observedDays < 7) rows.push(el("div", { class: "mkrow" }, el("span", {}, ""),
+    el("span", {}, `beobachtet seit ${m.observedDays < 1 ? "heute" : `${Math.round(m.observedDays)} Tagen`}`)));
+  const tr = trendText(m.trend);
+  if (tr) rows.push(el("div", { class: "mkrow" }, el("span", {}, "Trend günstigster Sofortkauf"), el("b", {}, tr.text)));
+
+  // Gewinn beim Weiterverkauf (bei Auktionen zum aktuellen Gebot)
+  const p = profitOf(d);
+  if (p) {
+    const r = state.resale;
+    rows.unshift(el("div", { class: "profit" + (p.value > 0 ? "" : " neg") },
+      el("span", {}, d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
+        el("span", { class: "why" }, `Verkauf ${euro0(p.resale)} (${p.basis}) − Versand/Verpackung ${euro0(r.shipping + r.packaging)}`
+          + (p.fee ? ` − Gebühren ${euro0(p.fee)}` : ""))),
+      el("b", {}, `${p.value >= 0 ? "+" : "−"}${euro0(Math.abs(p.value))}`)));
   }
   return el("div", { class: "mk" }, ...rows);
 }
@@ -406,6 +461,13 @@ function renderSearches(searches, markets) {
 
 document.getElementById("type").onchange = (e) => { state.type = e.target.value; renderGrid(); };
 document.getElementById("sort").onchange = (e) => { state.sort = e.target.value; renderGrid(); };
+try { state.business = localStorage.getItem("business") === "1"; } catch {}
+document.getElementById("business").checked = state.business;
+document.getElementById("business").onchange = (e) => {
+  state.business = e.target.checked;
+  try { localStorage.setItem("business", state.business ? "1" : "0"); } catch {}
+  renderGrid();
+};
 document.getElementById("linkform").onsubmit = (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
@@ -433,6 +495,15 @@ function renderStats() {
   document.getElementById("tiles").replaceChildren(
     tile("Verkauft (Median, 30 Tage)", sd.n ? eur.format(sd.median) : "–", `${sd.n} Verkäufe`),
     tile("Typische Spanne", sd.n >= 4 ? `${eur.format(sd.p25)} – ${eur.format(sd.p75)}` : "–", "mittlere 50 % der Verkäufe"),
+    (() => {
+      const mk = state.markets[m.label] ?? {};
+      return tile("Nachfrage", `${mk.salesWeek ?? 0} Verkäufe/Woche`,
+        mk.observedDays < 7 ? `beobachtet seit ${mk.observedDays < 1 ? "heute" : `${Math.round(mk.observedDays)} Tagen`}` : "letzte 7 Tage");
+    })(),
+    (() => {
+      const tr = trendText(state.markets[m.label]?.trend);
+      return tile("Trend günstigster Sofortkauf", tr ? tr.text.split(" (")[0] : "–", tr ? tr.text.split(" (")[1]?.replace(")", "") : "noch zu kurz beobachtet");
+    })(),
     (() => {
       const a = m.auctions ?? { ended: 0, sold: 0 };
       const prices = (m.ended ?? []).filter((x) => x.result === "sold" && x.at > Date.now() - 30 * 864e5).map((x) => x.price);
@@ -592,6 +663,7 @@ async function load() {
   state.deals = data.deals ?? [];
   state.markets = Object.fromEntries((data.markets ?? []).map((m) => [m.label, m]));
   state.dealThreshold = data.dealThreshold ?? 0.85;
+  if (data.resale) state.resale = data.resale;
   document.getElementById("status").textContent = data.updatedAt
     ? `Stand: ${new Date(data.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · ${state.deals.length} Angebote`
     : "Noch keine Daten.";
