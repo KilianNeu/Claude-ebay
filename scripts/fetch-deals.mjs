@@ -27,6 +27,7 @@ const statsFile = new URL("../data/stats.json", import.meta.url);
 
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
 history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot, 25-%-Quantil], ...]
+history.cheapest ??= {};  // Modell -> [{ id, title, url, isNew, price, from, to }, ...]
 // Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
 // (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
 const HISTORY_VERSION = 2;
@@ -280,9 +281,6 @@ async function dealsFor(token, s) {
   };
   const all = priceStats(refItems), used = priceStats(refItems.filter((i) => !isNew(i))), fresh = priceStats(refItems.filter(isNew));
   const askMedian = all.median;
-  if (Number.isFinite(askMedian)) {
-    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(all.min), round(all.p25)]);
-  }
   const sold = soldStats(s.label);
   const { soldMedian, soldCount } = sold;
   const useSold = soldCount >= MIN_SOLD;
@@ -325,10 +323,22 @@ async function dealsFor(token, s) {
 
   // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze), neu oder gebraucht.
   const bin = [...refItems, ...cheapest]
-    .map((i) => ({ price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
+    .map((i) => ({ id: i.itemId, price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
     .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
     .sort((a, b) => a.price - b.price)[0];
   if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
+
+  // Verlauf: Median, Anzahl, günstigstes verfügbares Angebot (aus der preissortierten Suche) und Viertel.
+  if (Number.isFinite(askMedian)) {
+    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, bin ? round(bin.price) : null, round(all.p25)]);
+  }
+  // Protokoll des günstigsten Angebots: gleiches Angebot verlängert den Zeitraum, ein neues beginnt einen.
+  if (bin) {
+    const log = (history.cheapest[s.label] ??= []);
+    const last = log.at(-1);
+    if (last && last.id === bin.id) Object.assign(last, { to: now, price: round(bin.price) });
+    else log.push({ id: bin.id, title: bin.title, url: bin.url, isNew: bin.isNew, price: round(bin.price), from: now, to: now });
+  }
   console.log(`  ${s.label}: Angebote ${round(askMedian)} € (${refItems.length}), verkauft ${round(soldMedian) ?? "–"} € (${soldCount}), ${deals.length} Treffer`);
   return { deals, market };
 }
@@ -340,6 +350,9 @@ function prune() {
   }
   const ids = new Set();
   history.sold = history.sold.filter((x) => x.at > now - 90 * DAY && !ids.has(x.id) && ids.add(x.id));
+  for (const label of Object.keys(history.cheapest)) {
+    history.cheapest[label] = history.cheapest[label].filter((x) => x.to > now - 90 * DAY);
+  }
   for (const label of Object.keys(history.snapshots)) {
     history.snapshots[label] = history.snapshots[label].filter(([t]) => t > now - 90 * DAY);
   }
@@ -359,14 +372,16 @@ function buildStats() {
       buckets.set(key, b);
     }
     const series = [...buckets].sort((a, b) => a[0] - b[0])
-      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(median(b.min)), round(median(b.p25))]);
+      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), b.min.length ? Math.min(...b.min) : null, round(median(b.p25))]);
     const sales = history.sold.filter((x) => x.model === s.label)
       .map((x) => ({ t: x.at, price: x.price, kind: x.kind, id: x.id }))
       .sort((a, b) => b.t - a.t);
     const recent = sales.filter((x) => x.t > now - SOLD_WINDOW).map((x) => x.price);
     const q = (p) => round(quantile(recent, p));
+    const cheapestLog = (history.cheapest[s.label] ?? []).slice(-20).reverse();
     return {
       label: s.label,
+      cheapestLog,
       sold: { n: recent.length, min: q(0), p25: q(0.25), median: q(0.5), p75: q(0.75), max: q(1) },
       series,
       sales,
