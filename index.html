@@ -119,7 +119,7 @@
 <div class="wrap">
   <header>
     <h1>Grafikkarten-Schnäppchen</h1>
-    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör und Komplett-PCs sind herausgefiltert.</p>
+    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör, Komplett-PCs und Verkäufer mit weniger als 10 Bewertungen oder unter 97 % positiv sind herausgefiltert.</p>
     <div class="status" id="status">Lade Angebote …</div>
   </header>
 
@@ -288,7 +288,8 @@ function renderGrid() {
       d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
       d.alsoBuyItNow ? el("span", { class: "tag" }, "auch Sofort-Kaufen") : null,
       d.condition ? el("span", { class: "tag" }, d.condition) : null,
-      d.location ? el("span", { class: "tag" }, d.location === "DE" ? "aus Deutschland" : d.location) : null);
+      d.location ? el("span", { class: "tag" }, d.location === "DE" ? "aus Deutschland" : d.location) : null,
+      d.seller?.score != null ? el("span", { class: "tag" }, `Verkäufer: ${d.seller.score} Bew.${d.seller.positive ? ` · ${String(d.seller.positive).replace(".", ",")} %` : ""}`) : null);
     grid.append(el("a", { class: "card", href: d.url, target: "_blank", rel: "noopener" },
       thumb,
       el("div", { class: "body" },

@@ -116,6 +116,15 @@ function modelPattern(s) {
   return new RegExp(`(^|[^0-9])${tokens.join("[\\s-]*")}([^a-z0-9]|$)`); // "RTX4080" zulassen
 }
 
+// Unseriöse Verkäufer ausschließen: neue Konten mit kaum Bewertungen und Verkäufer mit zu
+// vielen negativen Bewertungen. Fehlt die Angabe, bleibt das Angebot drin.
+function trusted(i) {
+  const score = Number(i.seller?.feedbackScore), positive = Number(i.seller?.feedbackPercentage);
+  if (Number.isFinite(score) && score < (config.minSellerFeedback ?? 0)) return false;
+  if (Number.isFinite(positive) && score > 0 && positive < (config.minSellerPositive ?? 0)) return false;
+  return true;
+}
+
 // Nur Angebote vom deutschen eBay in Euro. UK-Angebote (ebay.co.uk, Preis in £) tragen teils einen
 // deutschen Standort und kämen sonst durch; hier fallen sie über Marktplatz und Originalwährung raus.
 function domestic(i) {
@@ -144,7 +153,7 @@ function toDeal(item, s, reference) {
     reference: Number.isFinite(reference) ? Math.round(reference * 100) / 100 : null,
     discount: Number.isFinite(reference) && reference > 0 ? Math.round((1 - total / reference) * 100) : null,
     location: item.itemLocation?.country ?? null,
-    seller: item.seller ? { name: item.seller.username, feedback: item.seller.feedbackPercentage } : null,
+    seller: item.seller ? { name: item.seller.username, score: item.seller.feedbackScore ?? null, positive: item.seller.feedbackPercentage ?? null } : null,
     search: s.label,
   };
 }
@@ -237,7 +246,7 @@ async function dealsFor(token, s) {
   // ("Als Ersatzteil / defekt") sowie per Ausschlusswörtern im Titel.
   // Nur Artikel, die laut eBay in Deutschland liegen – kein Zoll, keine Einfuhrumsatzsteuer.
   const model = modelPattern(s);
-  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && domestic(i)
+  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && domestic(i) && trusted(i)
     && model.test((i.title ?? "").toLowerCase()) && !excluded(i.title ?? "", terms));
   // Auktionen mit Sofort-Kaufen-Option kommen auch bei buyingOptions:{FIXED_PRICE}, ihr Preis ist aber
   // das Gebot, nicht der Sofort-Kaufen-Preis. Für Angebotspreise daher nur reine Sofortkäufe.

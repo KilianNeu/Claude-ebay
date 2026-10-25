@@ -6,6 +6,8 @@
   "maxItemsPerSearch": 10,
   "dealThreshold": 0.85,
   "floorRatio": 0.4,
+  "minSellerFeedback": 10,
+  "minSellerPositive": 97,
   "exclude": [
     "defekt",
     "bastler",

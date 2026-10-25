@@ -44,6 +44,8 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
 - `dealThreshold: 0.85` – höchstens 85 % des üblichen Preises
 - `floorRatio: 0.4` – alles unter 40 % gilt als Zubehör/Fake und wird ignoriert
 - `exclude` – Wörter, die nie im Titel vorkommen dürfen (ganze Wörter)
+- `minSellerFeedback: 10`, `minSellerPositive: 97` – Verkäufer mit weniger Bewertungen oder
+  weniger positiven Bewertungen werden ausgeschlossen
 - `excludeParts` – Wortteile, die auch in Zusammensetzungen greifen (z. B. „Kühlkörper“ in „Lüfter+Kühlkörper“)
 - `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
 - `conditionIds` – nur gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist ausgeschlossen
