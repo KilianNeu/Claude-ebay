@@ -29,6 +29,15 @@ const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() =>
 history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot, 25-%-Quantil], ...]
 history.cheapest ??= {};  // Modell -> [{ id, title, url, isNew, price, from, to }, ...]
 history.ended ??= [];     // beendete Auktionen: { id, model, title, url, price, bids, at, result }
+// Auktionsverkäufe aus der Zeit vor der Liste nachtragen, damit Diagramm und Liste übereinstimmen.
+for (const x of history.sold) {
+  if (x.kind !== "auction" || history.ended.some((e) => e.id === x.id)) continue;
+  const l = history.listings[x.id];
+  history.ended.push({
+    id: x.id, model: x.model, title: l?.title ?? null, url: `https://www.ebay.de/itm/${String(x.id).split("|")[1] ?? x.id}`,
+    price: x.price, bids: l?.bids ?? null, at: x.at, result: "sold",
+  });
+}
 // Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
 // (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
 const HISTORY_VERSION = 2;
