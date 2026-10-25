@@ -302,7 +302,7 @@ function renderGrid() {
     discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
     price: (a, b) => a.total - b.total,
     ending: (a, b) => (a.endsAt ? new Date(a.endsAt) : Infinity) - (b.endsAt ? new Date(b.endsAt) : Infinity),
-    profit: (a, b) => (profitOf(b)?.value ?? -Infinity) - (profitOf(a)?.value ?? -Infinity),
+    profit: (a, b) => { const v = (d) => { const p = profitOf(d); return p && !p.longRunning ? p.value : -Infinity; }; return v(b) - v(a); },
   };
   list.sort(by[state.sort]);
   grid.replaceChildren();
@@ -347,13 +347,23 @@ const euro0 = (v) => eur.format(v).replace(",00", "");
 // Lage des Preises in der Spanne und bei Auktionen Luft bis zum Marktpreis plus Maximalgebot.
 // Erwarteter Gewinn beim Weiterverkauf: Verkaufspreis (Median der Verkäufe, sonst Referenz)
 // minus Kaufpreis, Versand und Verpackung beim Weiterverkauf und ggf. eBay-Gebühren.
+// Ohne echte Verkäufe höchstens der günstigste verfügbare Sofortkauf: teurer verkauft man nicht schnell,
+// solange ein Konkurrenzangebot darunter liegt. Bei Auktionen mit mehr als einem Tag Restlaufzeit ist das
+// aktuelle Gebot nur ein Zwischenstand; gerechnet wird dann mit dem lohnenden Maximalgebot.
 function profitOf(d) {
   const m = state.markets[d.search];
-  const resale = m?.soldCount >= 3 ? m.soldMedian : d.reference;
+  const sold = m?.soldCount >= 3;
+  const cap = m?.cheapestBin?.url !== d.url ? m?.cheapestBin?.price : null;
+  let resale = sold ? m.soldMedian : d.reference, basis = sold ? `Median von ${m.soldCount} Verkäufen` : "Marktpreis-Schätzung";
+  if (!sold && cap && cap < resale) { resale = cap; basis = "günstigster Sofortkauf"; }
   if (!resale) return null;
   const r = state.resale, fee = state.business ? resale * r.feeRate : 0;
+  // Höchster Kaufpreis inkl. Versand, bei dem nach Kosten noch 10 % (mindestens 15 €) Gewinn bleiben.
+  const margin = Math.max(15, resale * 0.1);
+  const maxTotal = resale - fee - r.shipping - r.packaging - margin;
+  const longRunning = d.auction && d.endsAt && Date.parse(d.endsAt) - Date.now() > 864e5;
   const value = resale - fee - r.shipping - r.packaging - d.total;
-  return { value, resale, fee, basis: m?.soldCount >= 3 ? `Median von ${m.soldCount} Verkäufen` : "Marktpreis-Schätzung" };
+  return { value, resale, fee, basis, longRunning, maxTotal, margin };
 }
 
 function ageTag(d) {
@@ -401,12 +411,12 @@ function marketBlock(d) {
     const share = Math.round(sales.filter((x) => x.price > d.total).length / sales.length * 100);
     rows.push(el("div", { class: "hint" + (share >= 75 ? " good" : "") }, `Günstiger als ${share} % der Verkäufe`));
   }
-  if (d.auction && d.reference) {
-    const room = d.reference - d.total;
-    const maxBid = d.reference * (state.dealThreshold ?? 0.85) - (d.shipping ?? 0);
-    rows.push(el("div", { class: "hint" }, room > 0 ? `Bis Marktpreis noch ${euro0(room)} Luft` : "Gebot liegt schon über dem Marktpreis"));
-    if (maxBid > 0) rows.push(el("div", { class: "hint good" }, `Lohnendes Maximalgebot: ${euro0(maxBid)}`
-      + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")));
+  const pf = profitOf(d);
+  if (d.auction && pf) {
+    const maxBid = pf.maxTotal - (d.shipping ?? 0);
+    rows.push(el("div", { class: maxBid > d.total - (d.shipping ?? 0) ? "hint good" : "hint bad" }, maxBid > 0
+      ? `Lohnendes Maximalgebot: ${euro0(maxBid)}` + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")
+      : "Lohnt sich bei diesem Marktpreis nicht"));
   }
   // Nachfrage: wie schnell verkauft sich das Modell?
   const auc = m.auctionsEnded ? ` · ${Math.round(m.auctionsSold / m.auctionsEnded * 100)} % der Auktionen verkauft` : "";
@@ -421,11 +431,12 @@ function marketBlock(d) {
   const p = profitOf(d);
   if (p) {
     const r = state.resale;
-    rows.unshift(el("div", { class: "profit" + (p.value > 0 ? "" : " neg") },
-      el("span", {}, d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
+    rows.unshift(el("div", { class: "profit" + (p.value > 0 && !p.longRunning ? "" : " neg") },
+      el("span", {}, p.longRunning ? "Gewinn beim aktuellen Gebot (Zwischenstand)" : d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
         el("span", { class: "why" }, `Verkauf ${euro0(p.resale)} (${p.basis}) − Versand/Verpackung ${euro0(r.shipping + r.packaging)}`
-          + (p.fee ? ` − Gebühren ${euro0(p.fee)}` : ""))),
-      el("b", {}, `${p.value >= 0 ? "+" : "−"}${euro0(Math.abs(p.value))}`)));
+          + (p.fee ? ` − Gebühren ${euro0(p.fee)}` : "")
+          + (p.longRunning ? `. Läuft noch ${Math.round((Date.parse(d.endsAt) - Date.now()) / 864e5)} Tage – das Gebot steigt noch.` : ""))),
+      el("b", {}, p.longRunning ? "offen" : `${p.value >= 0 ? "+" : "−"}${euro0(Math.abs(p.value))}`)));
   }
   return el("div", { class: "mk" }, ...rows);
 }
