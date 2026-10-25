@@ -25,6 +25,14 @@ const statsFile = new URL("../data/stats.json", import.meta.url);
 
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
 history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot], ...]
+// Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
+// (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
+const HISTORY_VERSION = 2;
+if (history.version !== HISTORY_VERSION) {
+  history.sold = [];
+  history.snapshots = {};
+  history.version = HISTORY_VERSION;
+}
 let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS;
 const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 
@@ -98,6 +106,23 @@ function quantile(values, q) {
 
 const median = (values) => quantile(values, 0.5);
 
+// eBays Suche ist unscharf: "rtx 4080" liefert auch "RTX 2080". Deshalb muss die Modellnummer samt
+// Zusatz (Ti, Super, XT) im Titel stehen, z. B. "4070 Ti" oder "4070Ti". "rtx"/"rx" und Speichergrößen
+// sind optional.
+function modelPattern(s) {
+  const tokens = s.query.toLowerCase().split(/\s+/).filter((t) => !/^(rtx|rx|gtx|\d+gb)$/.test(t));
+  return new RegExp(`(^|[^0-9])${tokens.join("[\\s-]*")}([^a-z0-9]|$)`); // "RTX4080" zulassen
+}
+
+// Nur Angebote vom deutschen eBay in Euro. UK-Angebote (ebay.co.uk, Preis in £) tragen teils einen
+// deutschen Standort und kämen sonst durch; hier fallen sie über Marktplatz und Originalwährung raus.
+function domestic(i) {
+  const converted = [i.price, i.currentBidPrice].some((p) => p?.convertedFromCurrency && p.convertedFromCurrency !== "EUR");
+  const market = i.listingMarketplaceId;
+  return !converted && (!market || market === "EBAY_DE")
+    && (!i.itemLocation?.country || i.itemLocation.country === "DE");
+}
+
 function toDeal(item, s, reference) {
   const total = totalPrice(item);
   const auction = item.buyingOptions?.includes("AUCTION") ?? false;
@@ -127,6 +152,7 @@ function remember(items, s) {
     const prev = history.listings[i.itemId];
     history.listings[i.itemId] = {
       model: s.label,
+      title: i.title,
       auction,
       price: Math.round(totalPrice(i) * 100) / 100,
       bids: auction ? i.bidCount ?? 0 : null,
@@ -154,6 +180,12 @@ async function settleAuction(token, id, l) {
     return;
   }
   const item = r.item;
+  // Sicherheitsnetz für ältere Historieneinträge ohne Modellprüfung
+  const search = config.searches.find((x) => x.label === l.model);
+  if (item.title && search && (!modelPattern(search).test(item.title.toLowerCase()) || !domestic(item))) {
+    l.done = true;
+    return;
+  }
   const bids = item.bidCount ?? 0;
   const reserveMissed = item.reservePriceMet === false;
   const ship = num(item.shippingOptions?.[0]?.shippingCost);
@@ -201,9 +233,9 @@ async function dealsFor(token, s) {
   // Defekte Karten doppelt ausschließen: per Zustandsfilter in der Suche und hier per Zustand 7000
   // ("Als Ersatzteil / defekt") sowie per Ausschlusswörtern im Titel.
   // Nur Artikel, die laut eBay in Deutschland liegen – kein Zoll, keine Einfuhrumsatzsteuer.
-  const keep = (items) => items.filter((i) => i.conditionId !== "7000"
-    && (!i.itemLocation?.country || i.itemLocation.country === "DE")
-    && !excluded(i.title ?? "", terms));
+  const model = modelPattern(s);
+  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && domestic(i)
+    && model.test((i.title ?? "").toLowerCase()) && !excluded(i.title ?? "", terms));
   const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
     + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "");
 
