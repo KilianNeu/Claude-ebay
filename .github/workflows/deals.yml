@@ -2,18 +2,19 @@ name: Angebote aktualisieren
 
 on:
   push:
+    branches-ignore: [data]
   workflow_dispatch:
   schedule:
-    - cron: "17 */3 * * *"   # alle 3 Stunden
+    - cron: "17 * * * *"   # stündlich, damit Auktionen kurz vor Ende erfasst werden
 
 permissions:
-  contents: read
+  contents: write   # Preishistorie auf den Branch "data" schreiben
   pages: write
   id-token: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -24,11 +25,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Preishistorie laden
+        run: |
+          if git fetch --depth=1 origin data; then
+            git worktree add --detach history FETCH_HEAD
+          else
+            git worktree add --orphan -b data history
+          fi
       - name: Angebote von eBay holen
         env:
           EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          HISTORY_FILE: history/history.json
         run: node scripts/fetch-deals.mjs
+      - name: Preishistorie speichern
+        working-directory: history
+        run: |
+          [ -f history.json ] || exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add history.json
+          git diff --cached --quiet && exit 0
+          git commit -q -m "Preishistorie $(date -u +%FT%TZ)"
+          git push origin HEAD:refs/heads/data
       - name: Seite zusammenstellen
         run: |
           mkdir -p _site/data

@@ -84,7 +84,7 @@
 <div class="wrap">
   <header>
     <h1>Grafikkarten-Schnäppchen</h1>
-    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem üblichen Preis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör und Komplett-PCs sind herausgefiltert.</p>
+    <p class="sub">Gebrauchte Grafikkarten bei eBay, die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör und Komplett-PCs sind herausgefiltert.</p>
     <div class="status" id="status">Lade Angebote …</div>
   </header>
 
@@ -118,10 +118,13 @@
     <div class="links" id="customlinks"></div>
   </div>
 
-  <h2>Beobachtete Modelle</h2>
+  <h2>Marktpreise</h2>
+  <p class="sub" style="margin-bottom:12px">„Verkauft“ ist der Median der letzten 30 Tage aus eigener Beobachtung: Auktionen mit dem letzten Gebot
+    vor Ende (eher etwas zu niedrig) und beendete Sofort-Kaufen-Angebote (Preisvorschläge nicht sichtbar, eher etwas zu hoch).
+    Ab 5 Verkäufen ist er die Referenz für Schnäppchen, sonst der Angebotspreis.</p>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Modell</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
+      <thead><tr><th>Modell</th><th>Verkauft</th><th>Angebote</th><th>Warum</th><th>Direkt bei eBay</th></tr></thead>
       <tbody id="searches"></tbody>
     </table>
   </div>
@@ -145,8 +148,8 @@
   </div>
 
   <footer>
-    Daten über die eBay Browse API, aktualisiert per GitHub Action. „Üblicher Preis“ ist der Median der relevantesten
-    Sofort-Kaufen-Angebote zum gleichen Modell – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
+    Daten über die eBay Browse API, aktualisiert per GitHub Action. Referenz ist der geschätzte Verkaufspreis
+    (ab 5 beobachteten Verkäufen) oder sonst der Median der Sofort-Kaufen-Angebote – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
     und Verkäuferbewertung prüfen. Keine Verbindung zu eBay Inc.
   </footer>
 </div>
@@ -220,7 +223,7 @@ function renderGrid() {
         el("div", { class: "title" }, d.title),
         meta,
         el("div", { class: "price" }, eur.format(d.total)),
-        el("div", { class: "ref" }, d.reference ? `inkl. Versand · üblich ca. ${eur.format(d.reference)}` : "inkl. Versand"))));
+        el("div", { class: "ref" }, d.reference ? `inkl. Versand · ${d.basis === "sold" ? "verkauft" : "angeboten"} ca. ${eur.format(d.reference)}` : "inkl. Versand"))));
   }
 }
 
@@ -236,12 +239,19 @@ function renderChips(searches) {
   }));
 }
 
-function renderSearches(searches) {
-  document.getElementById("searches").replaceChildren(...searches.map((s) =>
-    el("tr", {},
+function renderSearches(searches, markets) {
+  const byLabel = Object.fromEntries((markets ?? []).map((m) => [m.label, m]));
+  const cell = (value, count, active) => el("td", { style: "white-space:nowrap" + (active ? ";font-weight:700" : "") },
+    value ? eur.format(value) : "–", el("br"), el("span", { style: "color:var(--muted);font-weight:400;font-size:12px" }, `${count ?? 0}×`));
+  document.getElementById("searches").replaceChildren(...searches.map((s) => {
+    const m = byLabel[s.label] ?? {};
+    return el("tr", {},
       el("td", {}, el("strong", {}, s.label), el("br"), el("span", { style: "color:var(--muted)" }, s.query)),
+      cell(m.soldMedian, m.soldCount, m.basis === "sold"),
+      cell(m.askMedian, m.askCount, m.basis === "ask"),
       el("td", {}, s.note ?? ""),
-      el("td", {}, ...ebayLinks(s.query).map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t))))));
+      el("td", {}, ...ebayLinks(s.query).map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t))));
+  }));
 }
 
 document.getElementById("type").onchange = (e) => { state.type = e.target.value; renderGrid(); };
@@ -272,7 +282,7 @@ async function load() {
     n.append(el("strong", {}, "Hinweis: "), data.errors.join(" "));
   }
   renderChips(data.searches ?? []);
-  renderSearches(data.searches ?? []);
+  renderSearches(data.searches ?? [], data.markets);
   renderGrid();
 }
 load();

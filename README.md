@@ -1,10 +1,22 @@
 # Grafikkarten-Schnäppchen
 
 Eine GitHub-Pages-Seite, die gebrauchte Grafikkarten auf eBay.de unter Marktpreis anzeigt.
-Eine GitHub Action fragt alle 3 Stunden die eBay Browse API ab, vergleicht jedes Angebot
-(inkl. Versand) mit dem Median der üblichen Sofort-Kaufen-Preise derselben Suche und zeigt
+Eine GitHub Action fragt stündlich die eBay Browse API ab, vergleicht jedes Angebot
+(inkl. Versand) mit dem Marktpreis des Modells und zeigt
 alles an, was mindestens 15 % darunter liegt. Defekte Karten, Zubehör und
 Komplett-PCs werden über Ausschlusswörter herausgefiltert.
+
+## Verkaufspreise
+
+Die öffentliche eBay-API liefert keine verkauften Preise. Deshalb baut die Action eine eigene
+Historie auf (Branch `data`, Datei `history.json`):
+
+- **Auktionen** werden bis kurz vor Ende beobachtet; das letzte Gebot gilt als Verkaufspreis
+  (Untergrenze, weil in den letzten Minuten oft noch geboten wird).
+- **Sofort-Kaufen-Angebote**, die verschwinden, werden per `getItem` geprüft. Ist das Angebot
+  beendet, zählt der letzte Preis als „vermutlich verkauft“ (Preisvorschläge sind nicht sichtbar).
+
+Ab 5 Verkäufen in 30 Tagen ersetzt der Median dieser Verkäufe den Angebotspreis als Referenz.
 
 ## Einrichten
 

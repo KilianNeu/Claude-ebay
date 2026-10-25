@@ -1,12 +1,27 @@
 // Holt günstige Angebote über die eBay Browse API und schreibt data/deals.json.
 // Benötigt EBAY_CLIENT_ID und EBAY_CLIENT_SECRET (Production-Keyset von developer.ebay.com).
 // Ohne Keys wird eine leere Datei mit Hinweis geschrieben, damit die Seite trotzdem baut.
+//
+// Verkaufspreise liefert die öffentliche API nicht. Deshalb führt das Skript eine eigene
+// Historie (HISTORY_FILE): Auktionen werden bis kurz vor Ende beobachtet, verschwundene
+// Sofort-Kaufen-Angebote per getItem geprüft. Daraus entsteht ein geschätzter Verkaufspreis.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 
 const API = "https://api.ebay.com";
 const config = JSON.parse(await readFile(new URL("../searches.json", import.meta.url), "utf8"));
 const outFile = new URL("../data/deals.json", import.meta.url);
+const historyFile = process.env.HISTORY_FILE ?? new URL("../data/history.json", import.meta.url);
+
+const HOUR = 3.6e6, DAY = 24 * HOUR;
+const SOLD_WINDOW = 30 * DAY;     // Verkäufe der letzten 30 Tage zählen
+const MIN_SOLD = 5;               // ab so vielen Verkäufen ersetzt der Verkaufspreis den Angebotspreis
+const AUCTION_GRACE = 3 * HOUR;   // letzte Beobachtung höchstens so lange vor Auktionsende
+const MAX_CHECKS = 40;            // getItem-Prüfungen pro Lauf
+const now = Date.now();
+
+const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
+let checksLeft = MAX_CHECKS;
 
 async function getToken(id, secret) {
   const res = await fetch(`${API}/identity/v1/oauth2/token`, {
@@ -21,18 +36,28 @@ async function getToken(id, secret) {
   return (await res.json()).access_token;
 }
 
+const headers = (token) => ({
+  Authorization: `Bearer ${token}`,
+  "X-EBAY-C-MARKETPLACE-ID": config.marketplace,
+  "Accept-Language": "de-DE",
+});
+
 async function search(token, params) {
   if (config.categoryIds) params = { category_ids: config.categoryIds, ...params };
   const url = `${API}/buy/browse/v1/item_summary/search?` + new URLSearchParams(params);
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-EBAY-C-MARKETPLACE-ID": config.marketplace,
-      "Accept-Language": "de-DE",
-    },
-  });
+  const res = await fetch(url, { headers: headers(token) });
   if (!res.ok) throw new Error(`Suche fehlgeschlagen (${params.q}): ${res.status} ${await res.text()}`);
   return (await res.json()).itemSummaries ?? [];
+}
+
+// true = Angebot beendet (verkauft oder zurückgezogen), false = noch aktiv, null = unklar.
+async function hasEnded(token, itemId) {
+  const res = await fetch(`${API}/buy/browse/v1/item/${encodeURIComponent(itemId)}`, { headers: headers(token) });
+  if (res.status === 404 || res.status === 410) return true;
+  if (!res.ok) return null;
+  const item = await res.json();
+  const status = item.estimatedAvailabilities?.[0]?.estimatedAvailabilityStatus;
+  return (item.itemEndDate && new Date(item.itemEndDate) < now) || status === "OUT_OF_STOCK";
 }
 
 const num = (p) => (p ? Number(p.value) : NaN);
@@ -81,39 +106,107 @@ function toDeal(item, s, reference) {
   };
 }
 
+function remember(items, s) {
+  for (const i of items) {
+    const auction = i.buyingOptions?.includes("AUCTION") ?? false;
+    const prev = history.listings[i.itemId];
+    history.listings[i.itemId] = {
+      model: s.label,
+      auction,
+      price: Math.round(totalPrice(i) * 100) / 100,
+      bids: auction ? i.bidCount ?? 0 : null,
+      endsAt: i.itemEndDate ?? null,
+      firstSeen: prev?.firstSeen ?? now,
+      lastSeen: now,
+    };
+  }
+}
+
+function recordSale(id, l, kind) {
+  history.sold.push({ id, model: l.model, price: l.price, at: Math.min(now, l.endsAt ? Date.parse(l.endsAt) : now), kind });
+  l.done = true;
+}
+
+// Beendete Auktionen und verschwundene Sofort-Kaufen-Angebote als Verkauf erfassen.
+async function settle(token, s, seenIds) {
+  for (const [id, l] of Object.entries(history.listings)) {
+    if (l.model !== s.label || l.done || seenIds.has(id)) continue;
+    if (l.auction) {
+      const end = l.endsAt ? Date.parse(l.endsAt) : NaN;
+      if (!(end < now)) continue;
+      // Ohne Gebote oder zu frühe letzte Beobachtung: Endpreis unbekannt.
+      if (l.bids > 0 && l.lastSeen >= end - AUCTION_GRACE) recordSale(id, l, "auction");
+      else l.done = true;
+    } else if (l.lastSeen < now - HOUR / 2 && checksLeft > 0) {
+      checksLeft--;
+      const ended = await hasEnded(token, id).catch(() => null);
+      if (ended === true) recordSale(id, l, "vanished");
+      else if (ended === false) l.done = true; // nur aus der Trefferliste gerutscht
+    }
+  }
+}
+
+function soldStats(label) {
+  const prices = history.sold.filter((x) => x.model === label && x.at > now - SOLD_WINDOW).map((x) => x.price);
+  return { soldMedian: median(prices), soldCount: prices.length };
+}
+
+const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
+
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
   const keep = (items) => items.filter((i) => !excluded(i.title ?? "", terms));
   const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
     + (config.condition ? `,conditions:{${config.condition}}` : "");
 
-  // Referenzpreis: Median der relevantesten Sofortkauf-Angebote (ohne Zubehör, Defekte usw.).
-  const refItems = keep(await search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }));
-  const reference = median(refItems.map(totalPrice));
-  // Ohne Referenz lässt sich kein Schnäppchen erkennen.
-  if (!Number.isFinite(reference)) return [];
-  const floor = reference * (config.floorRatio ?? 0);
-  const cap = s.maxPrice ?? reference * config.dealThreshold;
-  const filter = `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where}`;
-
-  const [cheapest, ending] = await Promise.all([
-    search(token, { q: s.query, filter: `${filter},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "30" }),
-    search(token, { q: s.query, filter: `${filter},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "30" }),
+  // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
+  // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
+  const [refItems, ending] = await Promise.all([
+    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "100" }).then(keep),
+    search(token, { q: s.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
   ]);
+  remember([...refItems, ...ending], s);
+  await settle(token, s, new Set([...refItems, ...ending].map((i) => i.itemId)));
 
-  const seen = new Set();
-  const deals = keep([...cheapest, ...ending])
-    .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
-    .map((i) => toDeal(i, s, reference))
-    .filter((d) => Number.isFinite(d.total) && d.total >= floor && d.total <= reference * config.dealThreshold)
-    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
-    .slice(0, config.maxItemsPerSearch);
-  console.log(`  ${s.label}: Referenz ${reference.toFixed(0)} € aus ${refItems.length} Angeboten, ${deals.length} Treffer`);
-  return deals;
+  const askMedian = median(refItems.map(totalPrice));
+  const { soldMedian, soldCount } = soldStats(s.label);
+  const useSold = soldCount >= MIN_SOLD;
+  const reference = useSold ? soldMedian : askMedian;
+  const market = { label: s.label, askMedian: round(askMedian), askCount: refItems.length, soldMedian: round(soldMedian), soldCount, basis: useSold ? "sold" : "ask" };
+
+  let deals = [], cheapest = [];
+  // Ohne Referenz lässt sich kein Schnäppchen erkennen.
+  if (Number.isFinite(reference)) {
+    const floor = reference * (config.floorRatio ?? 0);
+    const cap = s.maxPrice ?? reference * config.dealThreshold;
+    cheapest = keep(await search(token, {
+      q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "30",
+    }));
+    const seen = new Set();
+    deals = [...cheapest, ...ending]
+      .filter((i) => !seen.has(i.itemId) && seen.add(i.itemId))
+      .map((i) => ({ ...toDeal(i, s, reference), basis: market.basis }))
+      .filter((d) => Number.isFinite(d.total) && d.total >= floor && d.total <= cap)
+      .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
+      .slice(0, config.maxItemsPerSearch);
+  }
+
+  remember(cheapest, s);
+  console.log(`  ${s.label}: Angebote ${round(askMedian)} € (${refItems.length}), verkauft ${round(soldMedian) ?? "–"} € (${soldCount}), ${deals.length} Treffer`);
+  return { deals, market };
+}
+
+// Alte Einträge entfernen, damit die Historie nicht endlos wächst.
+function prune() {
+  for (const [id, l] of Object.entries(history.listings)) {
+    if (l.lastSeen < now - 14 * DAY) delete history.listings[id];
+  }
+  const ids = new Set();
+  history.sold = history.sold.filter((x) => x.at > now - 90 * DAY && !ids.has(x.id) && ids.add(x.id));
 }
 
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = process.env;
-const result = { updatedAt: new Date().toISOString(), searches: config.searches, deals: [], errors: [] };
+const result = { updatedAt: new Date().toISOString(), searches: config.searches, markets: [], deals: [], errors: [] };
 
 if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   result.errors.push("Keine eBay-API-Keys hinterlegt (EBAY_CLIENT_ID / EBAY_CLIENT_SECRET).");
@@ -121,14 +214,18 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   const token = await getToken(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET);
   for (const s of config.searches) {
     try {
-      result.deals.push(...(await dealsFor(token, s)));
+      const { deals, market } = await dealsFor(token, s);
+      result.deals.push(...deals);
+      result.markets.push(market);
     } catch (e) {
       result.errors.push(e.message);
     }
   }
+  prune();
 }
 
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
+if (EBAY_CLIENT_ID && EBAY_CLIENT_SECRET) await writeFile(historyFile, JSON.stringify(history));
 await writeFile(outFile, JSON.stringify(result, null, 2));
 console.log(`${result.deals.length} Angebote gespeichert, ${result.errors.length} Fehler.`);
 for (const e of result.errors) console.warn("  " + e);
