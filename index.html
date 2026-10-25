@@ -325,7 +325,7 @@ function renderStats() {
     tile("Verkauft (Median, 30 Tage)", sd.n ? eur.format(sd.median) : "–", `${sd.n} Verkäufe`),
     tile("Typische Spanne", sd.n >= 4 ? `${eur.format(sd.p25)} – ${eur.format(sd.p75)}` : "–", "mittlere 50 % der Verkäufe"),
     tile("Angebote jetzt (Median)", last ? eur.format(last[1]) : "–", last ? `${last[2]} Angebote` : ""),
-    tile("Günstigstes Angebot", last ? eur.format(last[3]) : "–", "gebraucht, inkl. Versand"));
+    tile("Günstigstes Angebot", last ? eur.format(last[3]) : "–", "gebraucht, inkl. Versand, ohne Ausreißer"));
 
   document.getElementById("sales").replaceChildren(...(m.sales.length ? m.sales.slice(0, 15).map((x) =>
     el("tr", {},

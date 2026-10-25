@@ -259,11 +259,12 @@ function buildStats() {
     for (const [t, ask, count, min] of history.snapshots[s.label] ?? []) {
       const key = t < now - 3 * DAY ? Math.floor(t / DAY) * DAY + DAY / 2 : Math.floor(t / HOUR) * HOUR;
       const b = buckets.get(key) ?? { ask: [], count: [], min: [] };
-      b.ask.push(ask); b.count.push(count); b.min.push(min);
+      b.ask.push(ask); b.count.push(count);
+      if (min >= ask * (config.floorRatio ?? 0)) b.min.push(min); // ältere Ausreißer ignorieren
       buckets.set(key, b);
     }
     const series = [...buckets].sort((a, b) => a[0] - b[0])
-      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(Math.min(...b.min))]);
+      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(median(b.min))]);
     const sales = history.sold.filter((x) => x.model === s.label)
       .map((x) => ({ t: x.at, price: x.price, kind: x.kind, id: x.id }))
       .sort((a, b) => b.t - a.t);
