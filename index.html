@@ -347,15 +347,17 @@ const euro0 = (v) => eur.format(v).replace(",00", "");
 // Lage des Preises in der Spanne und bei Auktionen Luft bis zum Marktpreis plus Maximalgebot.
 // Erwarteter Gewinn beim Weiterverkauf: Verkaufspreis (Median der Verkäufe, sonst Referenz)
 // minus Kaufpreis, Versand und Verpackung beim Weiterverkauf und ggf. eBay-Gebühren.
-// Ohne echte Verkäufe höchstens der günstigste verfügbare Sofortkauf: teurer verkauft man nicht schnell,
-// solange ein Konkurrenzangebot darunter liegt. Bei Auktionen mit mehr als einem Tag Restlaufzeit ist das
-// aktuelle Gebot nur ein Zwischenstand; gerechnet wird dann mit dem lohnenden Maximalgebot.
+// Verkaufspreis ist der günstigste verfügbare Sofortkauf (ist es dieses Angebot selbst, der zweitgünstigste):
+// teurer verkauft man nicht schnell. Nur ohne Sofortkauf-Angebote dienen Verkäufe bzw. die Schätzung.
+// Bei Auktionen mit mehr als einem Tag Restlaufzeit ist das aktuelle Gebot nur ein Zwischenstand.
 function profitOf(d) {
   const m = state.markets[d.search];
-  const sold = m?.soldCount >= 3;
-  const cap = m?.cheapestBin?.url !== d.url ? m?.cheapestBin?.price : null;
-  let resale = sold ? m.soldMedian : d.reference, basis = sold ? `Median von ${m.soldCount} Verkäufen` : "Marktpreis-Schätzung";
-  if (!sold && cap && cap < resale) { resale = cap; basis = "günstigster Sofortkauf"; }
+  const self = m?.cheapestBin?.url === d.url;
+  const bin = self ? m?.nextBin : m?.cheapestBin;
+  let resale, basis;
+  if (bin) [resale, basis] = [bin.price, self ? "zweitgünstigster Sofortkauf" : "günstigster Sofortkauf"];
+  else if (m?.soldCount >= 3) [resale, basis] = [m.soldMedian, `Median von ${m.soldCount} Verkäufen`];
+  else [resale, basis] = [d.reference, "Marktpreis-Schätzung"];
   if (!resale) return null;
   const r = state.resale, fee = state.business ? resale * r.feeRate : 0;
   // Höchster Kaufpreis inkl. Versand, bei dem nach Kosten noch 10 % (mindestens 15 €) Gewinn bleiben.

@@ -380,10 +380,14 @@ async function dealsFor(token, s) {
   }
 
   // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze), neu oder gebraucht.
-  const bin = [...refItems, ...cheapest]
+  const bins = [...refItems, ...cheapest]
     .map((i) => ({ id: i.itemId, price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
     .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
-    .sort((a, b) => a.price - b.price)[0];
+    .sort((a, b) => a.price - b.price)
+    .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
+  const bin = bins[0];
+  // Zweitgünstigster Sofortkauf: Verkaufspreis für die Gewinnrechnung, wenn das Angebot selbst das günstigste ist.
+  if (bins[1]) market.nextBin = { price: Math.round(bins[1].price * 100) / 100, url: bins[1].url };
   if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
   Object.assign(market, demand(s.label), { trend: trend(s.label, bin?.price) });
 
