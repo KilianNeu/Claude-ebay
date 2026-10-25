@@ -52,7 +52,7 @@ jobs:
         run: |
           mkdir -p _site/data
           cp index.html searches.json _site/
-          cp data/deals.json _site/data/
+          cp data/deals.json data/stats.json _site/data/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

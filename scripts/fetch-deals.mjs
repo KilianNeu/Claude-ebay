@@ -21,7 +21,10 @@ const MAX_CHECKS = 20;            // getItem-Prüfungen verschwundener Sofort-Ka
 const MAX_AUCTION_CHECKS = 60;    // getItem-Abfragen beendeter Auktionen pro Lauf
 const now = Date.now();
 
+const statsFile = new URL("../data/stats.json", import.meta.url);
+
 const history = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({ listings: {}, sold: [] }));
+history.snapshots ??= {}; // Modell -> [[Zeit, Angebots-Median, Anzahl, günstigstes Angebot], ...]
 let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS;
 const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 
@@ -86,12 +89,14 @@ function excluded(title, terms) {
   return terms.some((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
 }
 
-function median(values) {
+function quantile(values, q) {
   const v = values.filter(Number.isFinite).sort((a, b) => a - b);
   if (!v.length) return NaN;
-  const m = Math.floor(v.length / 2);
-  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  const pos = (v.length - 1) * q, lo = Math.floor(pos);
+  return v[lo] + (v[Math.min(lo + 1, v.length - 1)] - v[lo]) * (pos - lo);
 }
+
+const median = (values) => quantile(values, 0.5);
 
 function toDeal(item, s, reference) {
   const total = totalPrice(item);
@@ -202,6 +207,9 @@ async function dealsFor(token, s) {
   await settle(token, s, new Set([...refItems, ...ending].map((i) => i.itemId)));
 
   const askMedian = median(refItems.map(totalPrice));
+  if (Number.isFinite(askMedian)) {
+    (history.snapshots[s.label] ??= []).push([now, round(askMedian), refItems.length, round(Math.min(...refItems.map(totalPrice)))]);
+  }
   const { soldMedian, soldCount } = soldStats(s.label);
   const useSold = soldCount >= MIN_SOLD;
   const reference = useSold ? soldMedian : askMedian;
@@ -236,6 +244,36 @@ function prune() {
   }
   const ids = new Set();
   history.sold = history.sold.filter((x) => x.at > now - 90 * DAY && !ids.has(x.id) && ids.add(x.id));
+  for (const label of Object.keys(history.snapshots)) {
+    history.snapshots[label] = history.snapshots[label].filter(([t]) => t > now - 90 * DAY);
+  }
+}
+
+// Statistik je Modell für die Seite: Angebotspreis-Verlauf (ältere Tage zu Tageswerten
+// verdichtet), einzelne Verkäufe und Quantile der Verkaufspreise der letzten 30 Tage.
+function buildStats() {
+  return config.searches.map((s) => {
+    const buckets = new Map();
+    for (const [t, ask, count, min] of history.snapshots[s.label] ?? []) {
+      const key = t < now - 3 * DAY ? Math.floor(t / DAY) * DAY + DAY / 2 : Math.floor(t / HOUR) * HOUR;
+      const b = buckets.get(key) ?? { ask: [], count: [], min: [] };
+      b.ask.push(ask); b.count.push(count); b.min.push(min);
+      buckets.set(key, b);
+    }
+    const series = [...buckets].sort((a, b) => a[0] - b[0])
+      .map(([t, b]) => [t, round(median(b.ask)), round(median(b.count)), round(Math.min(...b.min))]);
+    const sales = history.sold.filter((x) => x.model === s.label)
+      .map((x) => ({ t: x.at, price: x.price, kind: x.kind, id: x.id }))
+      .sort((a, b) => b.t - a.t);
+    const recent = sales.filter((x) => x.t > now - SOLD_WINDOW).map((x) => x.price);
+    const q = (p) => round(quantile(recent, p));
+    return {
+      label: s.label,
+      sold: { n: recent.length, min: q(0), p25: q(0.25), median: q(0.5), p75: q(0.75), max: q(1) },
+      series,
+      sales,
+    };
+  });
 }
 
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = process.env;
@@ -262,6 +300,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
 
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 if (EBAY_CLIENT_ID && EBAY_CLIENT_SECRET) await writeFile(historyFile, JSON.stringify(history));
+await writeFile(statsFile, JSON.stringify({ updatedAt: result.updatedAt, models: buildStats() }));
 await writeFile(outFile, JSON.stringify(result, null, 2));
 console.log(`${result.deals.length} Angebote gespeichert, ${result.errors.length} Fehler.`);
 for (const e of result.errors) console.warn("  " + e);

@@ -2,3 +2,4 @@ data/deals.json
 _site/
 node_modules/
 data/history.json
+data/stats.json

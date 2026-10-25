@@ -18,6 +18,11 @@ Historie auf (Branch `data`, Datei `history.json`):
 
 Ab 5 Verkäufen in 30 Tagen ersetzt der Median dieser Verkäufe den Angebotspreis als Referenz.
 
+Zusätzlich speichert jeder Lauf je Modell Angebots-Median, Anzahl und günstigstes Angebot.
+Daraus erzeugt das Skript `data/stats.json` für die **Preisstatistik** auf der Seite:
+Kennzahlen (Median und Spanne der Verkäufe), Preisverlauf mit einzelnen Verkäufen und eine
+Liste der letzten Verkäufe mit Link.
+
 ## Einrichten
 
 1. **eBay-API-Keys holen:** Auf <https://developer.ebay.com> kostenlos registrieren und ein

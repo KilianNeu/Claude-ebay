@@ -78,6 +78,23 @@
   .tips h3 { margin: 0 0 6px; font-size: 15px; }
   .tips p { margin: 0; color: var(--muted); font-size: 14px; }
   footer { color: var(--muted); font-size: 13px; padding: 40px 0 32px; }
+  /* Preisstatistik */
+  .viz { --series-1: #2a78d6; --series-2: #eb6834; --grid: #e6e7ea; }
+  @media (prefers-color-scheme: dark) { .viz { --series-1: #3987e5; --series-2: #d95926; --grid: #2c313a; } }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 12px; color: var(--muted); }
+  .chartbox { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; position: relative; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .legend svg { vertical-align: -2px; margin-right: 4px; }
+  #chart { width: 100%; height: 260px; display: block; touch-action: pan-y; }
+  #chart text { fill: var(--muted); font-size: 11px; }
+  .tip { position: absolute; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12px;
+    padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); }
+  .empty-chart { color: var(--muted); padding: 40px 0; text-align: center; }
+  .sales td { font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -116,6 +133,30 @@
       <button class="btn" type="submit">Links erzeugen</button>
     </form>
     <div class="links" id="customlinks"></div>
+  </div>
+
+  <h2>Preisstatistik</h2>
+  <div class="controls" style="margin-top:0">
+    <select id="statmodel" aria-label="Modell"></select>
+  </div>
+  <div class="viz">
+    <div class="tiles" id="tiles"></div>
+    <div class="chartbox">
+      <div class="legend">
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round"/></svg>Angebotspreis (Median)</span>
+        <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.5" fill="var(--series-2)"/></svg>Verkauf per Auktion</span>
+        <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" fill="var(--surface)" stroke="var(--series-2)" stroke-width="2"/></svg>Sofort-Kaufen, vermutlich verkauft</span>
+      </div>
+      <svg id="chart" role="img" aria-label="Preisverlauf"></svg>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Letzte Verkäufe</h3>
+    <div class="tablewrap">
+      <table class="sales">
+        <thead><tr><th>Ende</th><th>Preis inkl. Versand</th><th>Art</th><th></th></tr></thead>
+        <tbody id="sales"></tbody>
+      </table>
+    </div>
   </div>
 
   <h2>Marktpreise</h2>
@@ -263,6 +304,126 @@ document.getElementById("linkform").onsubmit = (e) => {
     .map(([t, u]) => el("a", { href: u, target: "_blank", rel: "noopener" }, t)));
 };
 
+// ---- Preisstatistik ----
+const stats = { models: [], current: null };
+const dateFmt = (t, withTime) => new Date(t).toLocaleString("de-DE", withTime
+  ? { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" } : { day: "2-digit", month: "2-digit" });
+const itemUrl = (id) => `https://www.ebay.de/itm/${String(id).split("|")[1] ?? id}`;
+const SVGNS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => { const n = document.createElementNS(SVGNS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+
+function tile(k, v, sub) {
+  return el("div", { class: "tile" }, el("div", { class: "k" }, k), el("div", { class: "v" }, v), sub ? el("div", { class: "s" }, sub) : null);
+}
+
+function renderStats() {
+  const m = stats.models.find((x) => x.label === stats.current);
+  if (!m) return;
+  const last = m.series.at(-1);
+  const sd = m.sold;
+  document.getElementById("tiles").replaceChildren(
+    tile("Verkauft (Median, 30 Tage)", sd.n ? eur.format(sd.median) : "–", `${sd.n} Verkäufe`),
+    tile("Typische Spanne", sd.n >= 4 ? `${eur.format(sd.p25)} – ${eur.format(sd.p75)}` : "–", "mittlere 50 % der Verkäufe"),
+    tile("Angebote jetzt (Median)", last ? eur.format(last[1]) : "–", last ? `${last[2]} Angebote` : ""),
+    tile("Günstigstes Angebot", last ? eur.format(last[3]) : "–", "gebraucht, inkl. Versand"));
+
+  document.getElementById("sales").replaceChildren(...(m.sales.length ? m.sales.slice(0, 15).map((x) =>
+    el("tr", {},
+      el("td", {}, dateFmt(x.t, true)),
+      el("td", {}, eur.format(x.price)),
+      el("td", {}, x.kind === "auction" ? "Auktion" : "Sofort-Kaufen (vermutlich)"),
+      el("td", {}, el("a", { href: itemUrl(x.id), target: "_blank", rel: "noopener" }, "ansehen"))))
+    : [el("tr", {}, el("td", { colspan: "4", style: "color:var(--muted)" }, "Noch keine Verkäufe beobachtet – die Historie füllt sich mit jeder Stunde."))]));
+  drawChart(m);
+}
+
+function drawChart(m) {
+  const svg = document.getElementById("chart"), tip = document.getElementById("tip");
+  svg.replaceChildren(); tip.hidden = true;
+  const W = svg.clientWidth || 600, H = 260, pad = { l: 52, r: 12, t: 10, b: 24 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const line = m.series.filter((p) => p[1] != null);
+  const dots = m.sales.filter((x) => x.t >= (line[0]?.[0] ?? 0) - 7 * 864e5);
+  if (line.length + dots.length < 2) {
+    const t = svgEl("text", { x: W / 2, y: H / 2, "text-anchor": "middle" });
+    t.textContent = "Noch zu wenig Daten – der Verlauf entsteht mit jedem stündlichen Lauf.";
+    svg.append(t); return;
+  }
+  const ts = [...line.map((p) => p[0]), ...dots.map((d) => d.t)];
+  const vs = [...line.map((p) => p[1]), ...dots.map((d) => d.price)];
+  let [x0, x1] = [Math.min(...ts), Math.max(...ts)];
+  if (x1 - x0 < 36e5) { x0 -= 18e5; x1 += 18e5; }
+  // y-Achse mit runden Schritten, nicht bei 0 beginnend (Preisniveau, keine Mengen)
+  const rawLo = Math.min(...vs), rawHi = Math.max(...vs), span = Math.max(rawHi - rawLo, rawHi * 0.1);
+  const step = [10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => span / s <= 5) ?? 2000;
+  const y0 = Math.floor((rawLo - span * 0.1) / step) * step, y1 = Math.ceil((rawHi + span * 0.1) / step) * step;
+  const X = (t) => pad.l + (t - x0) / (x1 - x0) * (W - pad.l - pad.r);
+  const Y = (v) => pad.t + (1 - (v - y0) / (y1 - y0)) * (H - pad.t - pad.b);
+
+  for (let v = y0; v <= y1; v += step) {
+    svg.append(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }));
+    const t = svgEl("text", { x: pad.l - 6, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = eur.format(v).replace(",00", ""); svg.append(t);
+  }
+  const days = (x1 - x0) / 864e5;
+  const nTicks = Math.max(2, Math.min(6, Math.floor((W - pad.l) / 90)));
+  for (let i = 0; i < nTicks; i++) {
+    const t = x0 + (x1 - x0) * i / (nTicks - 1);
+    const lbl = svgEl("text", { x: X(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" });
+    lbl.textContent = dateFmt(t, days < 3); svg.append(lbl);
+  }
+  if (line.length > 1) {
+    svg.append(svgEl("path", { d: line.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(""),
+      fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  } else if (line.length) {
+    svg.append(svgEl("circle", { cx: X(line[0][0]), cy: Y(line[0][1]), r: 4, fill: "var(--series-1)" }));
+  }
+  for (const d of dots) {
+    svg.append(d.kind === "auction"
+      ? svgEl("circle", { cx: X(d.t), cy: Y(d.price), r: 5, fill: "var(--series-2)", stroke: "var(--surface)", "stroke-width": 2 })
+      : svgEl("circle", { cx: X(d.t), cy: Y(d.price), r: 4, fill: "var(--surface)", stroke: "var(--series-2)", "stroke-width": 2 }));
+  }
+
+  // Hover: nächster Punkt (Linie oder Verkauf) mit Fadenkreuz und Tooltip
+  const cross = svgEl("line", { y1: pad.t, y2: H - pad.b, stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+  const ring = svgEl("circle", { r: 6, fill: "none", stroke: "var(--text)", "stroke-width": 2, visibility: "hidden" });
+  svg.append(cross, ring);
+  const pts = [
+    ...line.map((p) => ({ x: X(p[0]), y: Y(p[1]), html: `${dateFmt(p[0], true)} · Angebote: ${eur.format(p[1])} (${p[2]}×)` })),
+    ...dots.map((d) => ({ x: X(d.t), y: Y(d.price), html: `${dateFmt(d.t, true)} · ${d.kind === "auction" ? "Auktion" : "Sofort-Kaufen"}: ${eur.format(d.price)}` })),
+  ];
+  const hide = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); ring.setAttribute("visibility", "hidden"); };
+  svg.onpointerleave = hide;
+  svg.onpointermove = (e) => {
+    const r = svg.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width, my = (e.clientY - r.top) * H / r.height;
+    let best = null, bd = Infinity;
+    for (const p of pts) { const d = Math.abs(p.x - mx) * 2 + Math.abs(p.y - my) * 0.5; if (d < bd) { bd = d; best = p; } }
+    if (!best || Math.abs(best.x - mx) > 40) return hide();
+    cross.setAttribute("x1", best.x); cross.setAttribute("x2", best.x); cross.setAttribute("visibility", "visible");
+    ring.setAttribute("cx", best.x); ring.setAttribute("cy", best.y); ring.setAttribute("visibility", "visible");
+    tip.textContent = best.html; tip.hidden = false;
+    const pr = svg.parentElement.getBoundingClientRect();
+    const sx = r.left - pr.left + best.x * r.width / W, sy = r.top - pr.top + best.y * r.height / H;
+    const half = tip.offsetWidth / 2, box = pr.width;
+    tip.style.left = `${Math.min(Math.max(sx, half + 4), box - half - 4)}px`;
+    tip.style.top = `${sy - 10}px`;
+  };
+}
+
+async function loadStats(searches) {
+  try {
+    const res = await fetch("data/stats.json", { cache: "no-store" });
+    if (res.ok) stats.models = (await res.json()).models ?? [];
+  } catch {}
+  if (!stats.models.length) stats.models = searches.map((s) => ({ label: s.label, sold: { n: 0 }, series: [], sales: [] }));
+  const sel = document.getElementById("statmodel");
+  sel.replaceChildren(...stats.models.map((m) => el("option", { value: m.label }, m.label)));
+  stats.current = stats.models[0]?.label;
+  sel.onchange = () => { stats.current = sel.value; renderStats(); };
+  renderStats();
+  let w = 0;
+  addEventListener("resize", () => { const svg = document.getElementById("chart"); if (svg.clientWidth !== w) { w = svg.clientWidth; renderStats(); } });
+}
+
 async function load() {
   let data = { deals: [], searches: [], errors: [] };
   try {
@@ -283,6 +444,7 @@ async function load() {
   }
   renderChips(data.searches ?? []);
   renderSearches(data.searches ?? [], data.markets);
+  loadStats(data.searches ?? []);
   renderGrid();
 }
 load();
