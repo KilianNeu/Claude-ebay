@@ -2,6 +2,11 @@ name: Schnellcheck
 
 on:
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Nur eine Testnachricht an ntfy schicken"
+        type: boolean
+        default: false
   schedule:
     - cron: "*/10 * * * *"   # Reserve; zuverlässig alle 5 Minuten über cron-job.org
 
@@ -36,6 +41,7 @@ jobs:
           EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          QUICK_TEST: ${{ inputs.test }}
           MARKETS_FILE: state/markets.json
           NOTIFIED_FILE: notify/notified.json
         run: node scripts/quick-check.mjs

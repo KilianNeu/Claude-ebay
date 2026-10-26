@@ -16,6 +16,18 @@ const marketsFile = process.env.MARKETS_FILE ?? "data/markets.json";
 const notifiedFile = process.env.NOTIFIED_FILE ?? "data/notified.json";
 const notify = config.notify ?? {};
 
+if (process.env.QUICK_TEST === "true") {
+  if (!NTFY_TOPIC) throw new Error("Secret NTFY_TOPIC fehlt.");
+  const res = await fetch(NTFY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic: NTFY_TOPIC, title: "Testnachricht Grafikkarten-Schnäppchen",
+      message: "Wenn du das liest, kommen die Meldungen vom Schnellcheck an.", tags: ["white_check_mark"] }),
+  });
+  console.log(`Testnachricht gesendet: ${res.status}`);
+  process.exit(res.ok ? 0 : 1);
+}
+
 const markets = (await readFile(marketsFile, "utf8").then(JSON.parse).catch(() => null))?.markets;
 if (!markets) {
   console.log("Noch keine Marktwerte aus dem stündlichen Lauf – Schnellcheck übersprungen.");
