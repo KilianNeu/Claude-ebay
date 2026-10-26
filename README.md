@@ -67,7 +67,8 @@ python3 -m http.server   # dann http://localhost:8000
 `scripts/quick-check.mjs` (Workflow „Schnellcheck“) sucht alle 5 Minuten neu eingestellte
 Sofort-Kaufen-Angebote – alle Modelle gebündelt in drei Oder-Suchen – und prüft sie mit denselben
 Filtern wie der stündliche Lauf (`scripts/lib.mjs`). Lohnt sich ein Weiterverkauf (Gewinn gegenüber
-dem günstigsten Sofortkauf mindestens `notify.minProfit`, Standard 30 €), kommt eine Nachricht über
+dem günstigsten Sofortkauf mindestens `notify.minProfit` = 30 € und mindestens
+`notify.minProfitPercent` = 10 % des Kaufpreises), kommt eine Nachricht über
 [ntfy](https://ntfy.sh). Jedes Angebot wird nur einmal gemeldet (Branch `notify`).
 
 Einrichten:

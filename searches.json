@@ -15,6 +15,7 @@
   },
   "notify": {
     "minProfit": 30,
+    "minProfitPercent": 10,
     "maxAgeMinutes": 90
   },
   "exclude": [

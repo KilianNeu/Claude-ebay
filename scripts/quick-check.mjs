@@ -73,13 +73,16 @@ for (const i of items.values()) {
   const total = totalPrice(i);
   const fee = notify.business ? resale * r.feeRate : 0;
   const profit = resale - fee - r.shipping - r.packaging - total;
-  if (profit >= (notify.minProfit ?? 30)) hits.push({ i, s, total, resale, profit });
+  // Mindestgewinn absolut und relativ zum Kaufpreis: 100 € bei einer 5.900-€-Karte sind kein Schnäppchen.
+  const required = Math.max(notify.minProfit ?? 30, total * (notify.minProfitPercent ?? 10) / 100);
+  if (profit >= required) hits.push({ i, s, total, resale, profit, required });
 }
 console.log(`${items.size} Angebote geprüft, ${fresh} neu, ${hits.length} lohnend.`);
 
 const euro = (v) => `${Math.round(v)} €`;
-for (const { i, s, total, resale, profit } of hits.sort((a, b) => b.profit - a.profit)) {
+for (const { i, s, total, resale, profit, required } of hits.sort((a, b) => b.profit - a.profit)) {
   const message = `${i.title}\n${euro(total)} inkl. Versand · günstigster Sofortkauf sonst ${euro(resale)}`
+    + ` · Gewinn ${Math.round(profit / total * 100)} %`
     + `\nVerkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen`;
   console.log(`  ${s.label}: ${euro(total)}, Gewinn ≈ ${euro(profit)} – ${i.title}`);
   if (NTFY_TOPIC) {
@@ -92,7 +95,7 @@ for (const { i, s, total, resale, profit } of hits.sort((a, b) => b.profit - a.p
         message,
         click: i.itemWebUrl,
         tags: ["moneybag"],
-        priority: profit >= 2 * (notify.minProfit ?? 30) ? 5 : 4,
+        priority: profit >= 2 * required ? 5 : 4,
       }),
     });
     if (!res.ok) { console.warn(`  ntfy fehlgeschlagen: ${res.status} ${await res.text()}`); continue; }
