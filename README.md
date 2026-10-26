@@ -50,8 +50,8 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
   (Gebühren nur, wenn auf der Seite „Gewerblich verkaufen“ angehakt ist)
 - `minPrice` je Modell – Sofort-Kaufen-Angebote darunter gelten als Zubehör
 - `excludeParts` – Wortteile, die auch in Zusammensetzungen greifen (z. B. „Kühlkörper“ in „Lüfter+Kühlkörper“)
-- `categoryIds` (optional) – auf eine eBay-Kategorie beschränken; bewusst weggelassen, damit auch falsch
-  einsortierte Angebote gefunden werden
+- `categoryIds: "27386"` – eBay-Kategorie Grafikkarten; ohne sie liefert die Suche nach „5080“ auch
+  Aufkleber und Lego-Teile
 - `conditionIds` – neue, gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist
   ausgeschlossen. Neue (1000, 1500) und gebrauchte Karten werden gegen den Median ihrer eigenen Gruppe bewertet
 

@@ -1,6 +1,7 @@
 {
   "marketplace": "EBAY_DE",
   "currency": "EUR",
+  "categoryIds": "27386",
   "conditionIds": "1000|1500|2010|2020|2030|2500|3000",
   "maxItemsPerSearch": 10,
   "dealThreshold": 0.85,

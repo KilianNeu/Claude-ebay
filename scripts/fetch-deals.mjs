@@ -322,7 +322,8 @@ async function hybridBinPrice(token, i) {
 }
 
 // Suchwörter ohne "rtx"/"rx"/"gtx": eBay verlangt jedes Suchwort im Titel, und Titel wie
-// "4070 ti Gigabyte Aero" fehlen sonst. Ob es wirklich das Modell ist, prüft modelPattern.
+// "4070 ti Gigabyte Aero" fehlen sonst. Die Kategorie Grafikkarten hält fremde Artikel mit derselben
+// Nummer (Lego 5090, Aufkleber 5080 …) fern; ob es wirklich das Modell ist, prüft modelPattern.
 const searchQuery = (s) => s.query.replace(/^(rtx|rx|gtx)\s+/i, "");
 
 async function dealsFor(token, s) {
@@ -345,7 +346,8 @@ async function dealsFor(token, s) {
   const rejected = new Map();
   const keep = (items) => items.filter((i) => {
     const r = reason(i);
-    if (r && !i.buyingOptions?.includes("AUCTION")) {
+    // Nur echte Karten auflisten: Zubehör unter dem Mindestpreis ist uninteressant.
+    if (r && !i.buyingOptions?.includes("AUCTION") && totalPrice(i) >= (s.minPrice ?? 0)) {
       rejected.set(i.itemId, { price: Math.round(totalPrice(i) * 100) / 100, title: i.title, url: i.itemWebUrl, reason: r });
     }
     return !r;
