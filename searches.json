@@ -110,9 +110,7 @@
     "nur der kühlkörper",
     "kühlkörper ohne",
     "grafikkartenhalter",
-    "kartenhalter",
-    "stromadapter",
-    "netzteil"
+    "kartenhalter"
   ],
   "excludeParts": [
     "kühlblock",
