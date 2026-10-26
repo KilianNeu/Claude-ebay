@@ -40,13 +40,13 @@ for (const x of history.sold) {
 }
 // Version 2: Modell- und Marktplatzprüfung. Ältere Preise und Verkäufe enthielten fremde Modelle
 // (z. B. RTX 2080 unter RTX 4080) und UK-Angebote und werden einmalig verworfen.
-const HISTORY_VERSION = 2;
-if (history.version !== HISTORY_VERSION) {
-  history.sold = [];
-  history.snapshots = {};
-  history.version = HISTORY_VERSION;
-}
-let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS;
+const HISTORY_VERSION = 3;
+if ((history.version ?? 0) < 2) history.sold = [];
+// Version 3: Verlauf und Protokoll des günstigsten Sofortkaufs enthielten noch Startgebote von Auktionen
+// mit Sofort-Kaufen-Option und Angebote vor der Filterkorrektur; Verkäufe und Auktionen bleiben erhalten.
+if ((history.version ?? 0) < 3) { history.snapshots = {}; history.cheapest = {}; }
+history.version = HISTORY_VERSION;
+let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS, hybridChecksLeft = 30;
 const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 
 async function getToken(id, secret) {
@@ -140,7 +140,8 @@ function modelPattern(s) {
 function trusted(i) {
   const score = Number(i.seller?.feedbackScore), positive = Number(i.seller?.feedbackPercentage);
   if (Number.isFinite(score) && score < (config.minSellerFeedback ?? 0)) return false;
-  if (Number.isFinite(positive) && score > 0 && positive < (config.minSellerPositive ?? 0)) return false;
+  // eBay liefert bei manchen Verkäufern 0.0 % trotz vieler Bewertungen; das gilt als unbekannt.
+  if (Number.isFinite(positive) && positive > 0 && positive < (config.minSellerPositive ?? 0)) return false;
   return true;
 }
 
@@ -291,13 +292,33 @@ function demand(label) {
 }
 
 // Trend des günstigsten verfügbaren Sofortkaufs: jetzt gegenüber vor 7 Tagen (bzw. Beobachtungsbeginn).
+// Als Vergleichswert dient der Median der Messungen in einem 6-Stunden-Fenster, damit ein einzelner
+// Ausreißer den Trend nicht bestimmt.
 function trend(label, current) {
   const snaps = (history.snapshots[label] ?? []).filter((x) => x[3] != null);
   if (!snaps.length || !Number.isFinite(current)) return null;
-  const target = now - 7 * DAY;
-  const past = snaps.reduce((a, b) => Math.abs(b[0] - target) < Math.abs(a[0] - target) ? b : a);
-  if (now - past[0] < 6 * HOUR) return null; // zu kurz beobachtet
-  return { from: past[3], to: round(current), days: Math.round((now - past[0]) / DAY * 10) / 10 };
+  const start = Math.max(now - 7 * DAY, snaps[0][0]);
+  const window = snaps.filter((x) => x[0] >= start && x[0] < start + 6 * HOUR);
+  if (now - start < 12 * HOUR || window.length < 3) return null; // zu kurz beobachtet
+  return { from: round(median(window.map((x) => x[3]))), to: round(current), days: Math.round((now - start) / DAY * 10) / 10 };
+}
+
+// Sofort-Kaufen-Preis von Auktionen mit Sofort-Kaufen-Option: Die Suche liefert nur das Gebot, daher
+// einzeln abfragen (zwischengespeichert für 6 Stunden). Liefert den Gesamtpreis inkl. Versand oder null.
+async function hybridBinPrice(token, i) {
+  const h = history.listings[i.itemId];
+  if (h?.binCheckedAt > now - 6 * HOUR) return h.binTotal ?? null;
+  if (hybridChecksLeft <= 0) return null;
+  hybridChecksLeft--;
+  const r = await getItem(token, i.itemId).catch(() => null);
+  if (!r?.item) return null;
+  const it = r.item, ship = num(it.shippingOptions?.[0]?.shippingCost);
+  const bid = num(it.currentBidPrice), price = num(it.price);
+  // Nur wenn sich der Preis vom Gebot unterscheidet, ist er der Sofort-Kaufen-Preis.
+  const total = Number.isFinite(price) && (!Number.isFinite(bid) || price > bid) ? price + (Number.isFinite(ship) ? ship : 0) : null;
+  console.log(`    Auktion mit Sofort-Kaufen: Gebot ${bid}, price ${price}, Versand ${ship} → ${total ?? "kein Sofort-Kaufen-Preis"} – ${i.title}`);
+  if (h) Object.assign(h, { binCheckedAt: now, binTotal: total });
+  return total;
 }
 
 async function dealsFor(token, s) {
@@ -310,6 +331,7 @@ async function dealsFor(token, s) {
   // damit auf der Seite nachvollziehbar ist, warum ein günstiges Angebot fehlt.
   const reason = (i) => {
     if (i.conditionId === "7000") return "Zustand: als Ersatzteil / defekt";
+    if (s.minPrice && totalPrice(i) < s.minPrice && !i.buyingOptions?.includes("AUCTION")) return `unter Mindestpreis ${s.minPrice} € (Zubehör?)`;
     if (!domestic(i)) return "nicht auf ebay.de in Euro oder Standort nicht Deutschland";
     if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen, ${i.seller?.feedbackPercentage ?? "?"} % positiv`;
     if (!model.test((i.title ?? "").toLowerCase())) return s.memory ? "Modell bzw. Speichergröße nicht eindeutig im Titel" : "Modellnummer nicht im Titel";
@@ -332,11 +354,16 @@ async function dealsFor(token, s) {
 
   // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
   // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
-  const [refItems, ending] = await Promise.all([
-    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "200" }).then(keep).then(binOnly),
+  const [fixed, ending] = await Promise.all([
+    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "200" }).then(keep),
     search(token, { q: s.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
   ]);
-  remember([...refItems, ...ending], s);
+  const refItems = binOnly(fixed);
+  // Auktionen mit Sofort-Kaufen-Option aus beiden Suchen (ihr Sofort-Kaufen-Preis wird einzeln abgefragt)
+  const hybridItems = [...new Map([...fixed, ...ending]
+    .filter((i) => i.buyingOptions?.includes("AUCTION") && i.buyingOptions?.includes("FIXED_PRICE"))
+    .map((i) => [i.itemId, i])).values()];
+  remember([...refItems, ...ending, ...hybridItems], s);
   await settle(token, s, new Set([...refItems, ...ending].map((i) => i.itemId)));
 
   // Neue und gebrauchte Karten getrennt bewerten: Händler-Neuware würde sonst den Preis alter
@@ -397,8 +424,15 @@ async function dealsFor(token, s) {
   }
 
   // Günstigster plausibler Sofortkauf (ohne Ausreißer unter der Preisuntergrenze), neu oder gebraucht.
+  // Auktionen mit Sofort-Kaufen-Option zählen mit ihrem echten Sofort-Kaufen-Preis.
+  const hybrids = [];
+  for (const i of hybridItems) {
+    const total = await hybridBinPrice(token, i);
+    if (total != null) hybrids.push({ id: i.itemId, price: total, url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) });
+  }
   const bins = [...refItems, ...cheapest]
     .map((i) => ({ id: i.itemId, price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
+    .concat(hybrids)
     .filter((x) => x.price >= askMedian * (config.floorRatio ?? 0))
     .sort((a, b) => a.price - b.price)
     .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);

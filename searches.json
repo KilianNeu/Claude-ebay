@@ -1,7 +1,6 @@
 {
   "marketplace": "EBAY_DE",
   "currency": "EUR",
-  "categoryIds": "27386",
   "conditionIds": "1000|1500|2010|2020|2030|2500|3000",
   "maxItemsPerSearch": 10,
   "dealThreshold": 0.85,
@@ -105,11 +104,16 @@
     "pcb",
     "platine",
     "shroud",
-    "nur gehäuse"
+    "nur gehäuse",
+    "nur kühlkörper",
+    "nur der kühlkörper",
+    "kühlkörper ohne",
+    "grafikkartenhalter",
+    "kartenhalter",
+    "stromadapter",
+    "netzteil"
   ],
   "excludeParts": [
-    "kühlkörper",
-    "kuehlkoerper",
     "kühlblock",
     "heatsink",
     "lüfter+",
@@ -125,6 +129,7 @@
     {
       "label": "RTX 3060 12GB",
       "query": "rtx 3060 12gb",
+      "minPrice": 120,
       "exclude": [
         "ti",
         "3060ti"
@@ -134,11 +139,13 @@
     {
       "label": "RTX 3060 Ti",
       "query": "rtx 3060 ti",
+      "minPrice": 120,
       "note": "Solide 1440p-Karte, viele Angebote"
     },
     {
       "label": "RTX 3070",
       "query": "rtx 3070",
+      "minPrice": 150,
       "exclude": [
         "ti",
         "laptop",
@@ -149,6 +156,7 @@
     {
       "label": "RTX 3080",
       "query": "rtx 3080",
+      "minPrice": 200,
       "exclude": [
         "ti",
         "3080ti"
@@ -158,6 +166,7 @@
     {
       "label": "RTX 3090",
       "query": "rtx 3090",
+      "minPrice": 400,
       "exclude": [
         "ti",
         "3090ti"
@@ -167,11 +176,13 @@
     {
       "label": "RTX 4060 Ti",
       "query": "rtx 4060 ti",
+      "minPrice": 200,
       "note": "Sparsam, beliebt bei Einsteigern"
     },
     {
       "label": "RTX 4070",
       "query": "rtx 4070",
+      "minPrice": 300,
       "exclude": [
         "ti",
         "super",
@@ -183,6 +194,7 @@
     {
       "label": "RTX 4070 Super",
       "query": "rtx 4070 super",
+      "minPrice": 350,
       "exclude": [
         "ti",
         "4070ti"
@@ -192,6 +204,7 @@
     {
       "label": "RTX 4070 Ti",
       "query": "rtx 4070 ti",
+      "minPrice": 400,
       "exclude": [
         "super",
         "laptop"
@@ -201,6 +214,7 @@
     {
       "label": "RTX 4080",
       "query": "rtx 4080",
+      "minPrice": 500,
       "exclude": [
         "4080s",
         "laptop",
@@ -211,6 +225,7 @@
     {
       "label": "RTX 4080 Super",
       "query": "rtx 4080 super",
+      "minPrice": 550,
       "exclude": [
         "laptop"
       ],
@@ -219,6 +234,7 @@
     {
       "label": "RTX 4090",
       "query": "rtx 4090",
+      "minPrice": 1000,
       "exclude": [
         "laptop"
       ],
@@ -227,21 +243,25 @@
     {
       "label": "RX 6700 XT",
       "query": "rx 6700 xt",
+      "minPrice": 150,
       "note": "12 GB, günstiger als Nvidia"
     },
     {
       "label": "RX 6800 XT",
       "query": "rx 6800 xt",
+      "minPrice": 200,
       "note": "Stark für den Preis"
     },
     {
       "label": "RX 7800 XT",
       "query": "rx 7800 xt",
+      "minPrice": 250,
       "note": "Aktuelle AMD-Mittelklasse"
     },
     {
       "label": "RTX 5060",
       "query": "rtx 5060",
+      "minPrice": 180,
       "exclude": [
         "ti",
         "5060ti",
@@ -252,6 +272,7 @@
     {
       "label": "RTX 5060 Ti 8GB",
       "query": "rtx 5060 ti",
+      "minPrice": 220,
       "memory": 8,
       "exclude": [
         "laptop"
@@ -261,6 +282,7 @@
     {
       "label": "RTX 5060 Ti 16GB",
       "query": "rtx 5060 ti",
+      "minPrice": 280,
       "memory": 16,
       "exclude": [
         "laptop"
@@ -270,6 +292,7 @@
     {
       "label": "RTX 5070",
       "query": "rtx 5070",
+      "minPrice": 300,
       "exclude": [
         "ti",
         "5070ti",
@@ -280,6 +303,7 @@
     {
       "label": "RTX 5070 Ti",
       "query": "rtx 5070 ti",
+      "minPrice": 450,
       "exclude": [
         "laptop"
       ],
@@ -288,6 +312,7 @@
     {
       "label": "RTX 5080",
       "query": "rtx 5080",
+      "minPrice": 600,
       "exclude": [
         "laptop"
       ],
@@ -296,6 +321,7 @@
     {
       "label": "RTX 5090",
       "query": "rtx 5090",
+      "minPrice": 1200,
       "exclude": [
         "laptop"
       ],
@@ -304,18 +330,21 @@
     {
       "label": "RX 9060 XT 8GB",
       "query": "rx 9060 xt",
+      "minPrice": 180,
       "memory": 8,
       "note": "Günstige Variante"
     },
     {
       "label": "RX 9060 XT 16GB",
       "query": "rx 9060 xt",
+      "minPrice": 230,
       "memory": 16,
       "note": "Mehr Speicher, besser wiederverkäuflich"
     },
     {
       "label": "RX 9070",
       "query": "rx 9070",
+      "minPrice": 300,
       "exclude": [
         "xt",
         "9070xt"
@@ -325,6 +354,7 @@
     {
       "label": "RX 9070 XT",
       "query": "rx 9070 xt",
+      "minPrice": 350,
       "note": "AMDs aktuelles Spitzenmodell"
     }
   ]

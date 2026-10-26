@@ -48,8 +48,10 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
   weniger positiven Bewertungen werden ausgeschlossen
 - `resale` – Kosten beim Weiterverkauf für die Gewinnrechnung: Versand, Verpackung und Gebührensatz
   (Gebühren nur, wenn auf der Seite „Gewerblich verkaufen“ angehakt ist)
+- `minPrice` je Modell – Sofort-Kaufen-Angebote darunter gelten als Zubehör
 - `excludeParts` – Wortteile, die auch in Zusammensetzungen greifen (z. B. „Kühlkörper“ in „Lüfter+Kühlkörper“)
-- `categoryIds: "27386"` – eBay-Kategorie Grafikkarten
+- `categoryIds` (optional) – auf eine eBay-Kategorie beschränken; bewusst weggelassen, damit auch falsch
+  einsortierte Angebote gefunden werden
 - `conditionIds` – neue, gebrauchte und generalüberholte Karten; „Als Ersatzteil / defekt“ (7000) ist
   ausgeschlossen. Neue (1000, 1500) und gebrauchte Karten werden gegen den Median ihrer eigenen Gruppe bewertet
 
