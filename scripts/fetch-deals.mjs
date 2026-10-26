@@ -106,10 +106,11 @@ function totalPrice(item) {
 
 // Ausschlusswörter als ganze Wörter prüfen, damit "ti" nicht in "Edition" greift. Wortteile
 // (excludeParts) greifen überall, auch in Zusammensetzungen wie "Lüfter+Kühlkörper".
+// Liefert das gefundene Ausschlusswort (für die Begründung) oder undefined.
 function excluded(title, terms) {
   const t = title.toLowerCase();
-  return (config.excludeParts ?? []).some((part) => t.includes(part))
-    || terms.some((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
+  return (config.excludeParts ?? []).find((part) => t.includes(part))
+    ?? terms.find((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
 }
 
 function quantile(values, q) {
@@ -305,8 +306,24 @@ async function dealsFor(token, s) {
   // ("Als Ersatzteil / defekt") sowie per Ausschlusswörtern im Titel.
   // Nur Artikel, die laut eBay in Deutschland liegen – kein Zoll, keine Einfuhrumsatzsteuer.
   const model = modelPattern(s);
-  const keep = (items) => items.filter((i) => i.conditionId !== "7000" && domestic(i) && trusted(i)
-    && model.test((i.title ?? "").toLowerCase()) && !excluded(i.title ?? "", terms));
+  // Grund, warum ein Angebot verworfen wird (oder null). Verworfene Sofortkäufe werden gesammelt,
+  // damit auf der Seite nachvollziehbar ist, warum ein günstiges Angebot fehlt.
+  const reason = (i) => {
+    if (i.conditionId === "7000") return "Zustand: als Ersatzteil / defekt";
+    if (!domestic(i)) return "nicht auf ebay.de in Euro oder Standort nicht Deutschland";
+    if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen, ${i.seller?.feedbackPercentage ?? "?"} % positiv`;
+    if (!model.test((i.title ?? "").toLowerCase())) return s.memory ? "Modell bzw. Speichergröße nicht eindeutig im Titel" : "Modellnummer nicht im Titel";
+    const term = excluded(i.title ?? "", terms);
+    return term ? `Ausschlusswort „${term}“` : null;
+  };
+  const rejected = new Map();
+  const keep = (items) => items.filter((i) => {
+    const r = reason(i);
+    if (r && !i.buyingOptions?.includes("AUCTION")) {
+      rejected.set(i.itemId, { price: Math.round(totalPrice(i) * 100) / 100, title: i.title, url: i.itemWebUrl, reason: r });
+    }
+    return !r;
+  });
   // Auktionen mit Sofort-Kaufen-Option kommen auch bei buyingOptions:{FIXED_PRICE}, ihr Preis ist aber
   // das Gebot, nicht der Sofort-Kaufen-Preis. Für Angebotspreise daher nur reine Sofortkäufe.
   const binOnly = (items) => items.filter((i) => !i.buyingOptions?.includes("AUCTION"));
@@ -390,6 +407,10 @@ async function dealsFor(token, s) {
   if (bins[1]) market.nextBin = { price: Math.round(bins[1].price * 100) / 100, url: bins[1].url };
   if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
   Object.assign(market, demand(s.label), { trend: trend(s.label, bin?.price) });
+  // Die günstigsten verworfenen Sofortkäufe, soweit günstiger als der günstigste angezeigte.
+  market.rejected = [...rejected.values()].filter((x) => !bin || x.price < bin.price)
+    .sort((a, b) => a.price - b.price).slice(0, 8);
+  for (const x of market.rejected.slice(0, 3)) console.log(`    verworfen: ${x.price} € – ${x.reason} – ${x.title}`);
 
   // Verlauf: Median, Anzahl, günstigstes verfügbares Angebot (aus der preissortierten Suche) und Viertel.
   if (Number.isFinite(askMedian)) {
