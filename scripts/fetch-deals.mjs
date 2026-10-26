@@ -8,9 +8,12 @@
 // Das zuletzt gesehene Gebot zählt nicht, weil Auktionen in den letzten Minuten stark steigen.
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-
-const API = "https://api.ebay.com";
-const config = JSON.parse(await readFile(new URL("../searches.json", import.meta.url), "utf8"));
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+import {
+  config, getToken, search, getItem, num, totalPrice, excluded, quantile, median,
+  modelPattern, trusted, domestic, searchQuery, rejectReason,
+} from "./lib.mjs";
 const outFile = new URL("../data/deals.json", import.meta.url);
 const historyFile = process.env.HISTORY_FILE ?? new URL("../data/history.json", import.meta.url);
 
@@ -49,41 +52,6 @@ history.version = HISTORY_VERSION;
 let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS, hybridChecksLeft = 30;
 const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 
-async function getToken(id, secret) {
-  const res = await fetch(`${API}/identity/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: "Basic " + Buffer.from(`${id}:${secret}`).toString("base64"),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials&scope=" + encodeURIComponent("https://api.ebay.com/oauth/api_scope"),
-  });
-  if (!res.ok) throw new Error(`OAuth fehlgeschlagen: ${res.status} ${await res.text()}`);
-  return (await res.json()).access_token;
-}
-
-const headers = (token) => ({
-  Authorization: `Bearer ${token}`,
-  "X-EBAY-C-MARKETPLACE-ID": config.marketplace,
-  "Accept-Language": "de-DE",
-});
-
-async function search(token, params) {
-  if (config.categoryIds) params = { category_ids: config.categoryIds, ...params };
-  const url = `${API}/buy/browse/v1/item_summary/search?` + new URLSearchParams(params);
-  const res = await fetch(url, { headers: headers(token) });
-  if (!res.ok) throw new Error(`Suche fehlgeschlagen (${params.q}): ${res.status} ${await res.text()}`);
-  return (await res.json()).itemSummaries ?? [];
-}
-
-// { gone: true } = nicht mehr abrufbar, { item } = Angebotsdaten, null = Fehler.
-async function getItem(token, itemId) {
-  const res = await fetch(`${API}/buy/browse/v1/item/${encodeURIComponent(itemId)}`, { headers: headers(token) });
-  if (res.status === 404 || res.status === 410) return { gone: true };
-  if (!res.ok) return null;
-  return { item: await res.json() };
-}
-
 // true = Angebot beendet (verkauft oder zurückgezogen), false = noch aktiv, null = unklar.
 async function hasEnded(token, itemId) {
   const r = await getItem(token, itemId);
@@ -93,66 +61,6 @@ async function hasEnded(token, itemId) {
   return (r.item.itemEndDate && new Date(r.item.itemEndDate) < now) || status === "OUT_OF_STOCK";
 }
 
-const num = (p) => (p ? Number(p.value) : NaN);
-
-// Preis inkl. Versand; bei Auktionen das aktuelle Gebot.
-function totalPrice(item) {
-  const base = item.buyingOptions?.includes("AUCTION") && item.currentBidPrice
-    ? num(item.currentBidPrice)
-    : num(item.price);
-  const ship = num(item.shippingOptions?.[0]?.shippingCost);
-  return base + (Number.isFinite(ship) ? ship : 0);
-}
-
-// Ausschlusswörter als ganze Wörter prüfen, damit "ti" nicht in "Edition" greift. Wortteile
-// (excludeParts) greifen überall, auch in Zusammensetzungen wie "Lüfter+Kühlkörper".
-// Liefert das gefundene Ausschlusswort (für die Begründung) oder undefined.
-function excluded(title, terms) {
-  const t = title.toLowerCase();
-  return (config.excludeParts ?? []).find((part) => t.includes(part))
-    ?? terms.find((term) => new RegExp(`(^|[^a-z0-9äöü])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9äöü]|$)`).test(t));
-}
-
-function quantile(values, q) {
-  const v = values.filter(Number.isFinite).sort((a, b) => a - b);
-  if (!v.length) return NaN;
-  const pos = (v.length - 1) * q, lo = Math.floor(pos);
-  return v[lo] + (v[Math.min(lo + 1, v.length - 1)] - v[lo]) * (pos - lo);
-}
-
-const median = (values) => quantile(values, 0.5);
-
-// eBays Suche ist unscharf: "rtx 4080" liefert auch "RTX 2080". Deshalb muss die Modellnummer samt
-// Zusatz (Ti, Super, XT) im Titel stehen, z. B. "4070 Ti" oder "4070Ti". "rtx"/"rx" und Speichergrößen
-// sind optional.
-function modelPattern(s) {
-  const tokens = s.query.toLowerCase().split(/\s+/).filter((t) => !/^(rtx|rx|gtx|\d+gb)$/.test(t));
-  const model = new RegExp(`(^|[^0-9])${tokens.join("[\\s-]*")}([^a-z0-9]|$)`); // "RTX4080" zulassen
-  if (!s.memory) return model;
-  // Speichervarianten (z. B. 5060 Ti 8 GB / 16 GB): die Größe muss im Titel stehen, die andere nicht.
-  const mem = (gb) => new RegExp(`(^|[^0-9])${gb}\\s*g(b)?([^a-z0-9]|$)|o${gb}g([^a-z0-9]|$)`);
-  const others = [8, 12, 16].filter((gb) => gb !== s.memory).map(mem);
-  return { test: (t) => model.test(t) && mem(s.memory).test(t) && !others.some((o) => o.test(t)) };
-}
-
-// Unseriöse Verkäufer ausschließen: neue Konten mit kaum Bewertungen und Verkäufer mit zu
-// vielen negativen Bewertungen. Fehlt die Angabe, bleibt das Angebot drin.
-function trusted(i) {
-  const score = Number(i.seller?.feedbackScore), positive = Number(i.seller?.feedbackPercentage);
-  if (Number.isFinite(score) && score < (config.minSellerFeedback ?? 0)) return false;
-  // eBay liefert bei manchen Verkäufern 0.0 % trotz vieler Bewertungen; das gilt als unbekannt.
-  if (Number.isFinite(positive) && positive > 0 && positive < (config.minSellerPositive ?? 0)) return false;
-  return true;
-}
-
-// Nur Angebote vom deutschen eBay in Euro. UK-Angebote (ebay.co.uk, Preis in £) tragen teils einen
-// deutschen Standort und kämen sonst durch; hier fallen sie über Marktplatz und Originalwährung raus.
-function domestic(i) {
-  const converted = [i.price, i.currentBidPrice].some((p) => p?.convertedFromCurrency && p.convertedFromCurrency !== "EUR");
-  const market = i.listingMarketplaceId;
-  return !converted && (!market || market === "EBAY_DE")
-    && (!i.itemLocation?.country || i.itemLocation.country === "DE");
-}
 
 function toDeal(item, s, reference) {
   const total = totalPrice(item);
@@ -321,10 +229,6 @@ async function hybridBinPrice(token, i) {
   return total;
 }
 
-// Suchwörter ohne "rtx"/"rx"/"gtx": eBay verlangt jedes Suchwort im Titel, und Titel wie
-// "4070 ti Gigabyte Aero" fehlen sonst. Die Kategorie Grafikkarten hält fremde Artikel mit derselben
-// Nummer (Lego 5090, Aufkleber 5080 …) fern; ob es wirklich das Modell ist, prüft modelPattern.
-const searchQuery = (s) => s.query.replace(/^(rtx|rx|gtx)\s+/i, "");
 
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
@@ -334,15 +238,7 @@ async function dealsFor(token, s) {
   const model = modelPattern(s);
   // Grund, warum ein Angebot verworfen wird (oder null). Verworfene Sofortkäufe werden gesammelt,
   // damit auf der Seite nachvollziehbar ist, warum ein günstiges Angebot fehlt.
-  const reason = (i) => {
-    if (i.conditionId === "7000") return "Zustand: als Ersatzteil / defekt";
-    if (s.minPrice && totalPrice(i) < s.minPrice && !i.buyingOptions?.includes("AUCTION")) return `unter Mindestpreis ${s.minPrice} € (Zubehör?)`;
-    if (!domestic(i)) return "nicht auf ebay.de in Euro oder Standort nicht Deutschland";
-    if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen, ${i.seller?.feedbackPercentage ?? "?"} % positiv`;
-    if (!model.test((i.title ?? "").toLowerCase())) return s.memory ? "Modell bzw. Speichergröße nicht eindeutig im Titel" : "Modellnummer nicht im Titel";
-    const term = excluded(i.title ?? "", terms);
-    return term ? `Ausschlusswort „${term}“` : null;
-  };
+  const reason = (i) => rejectReason(i, s, model, terms);
   const rejected = new Map();
   const keep = (items) => items.filter((i) => {
     const r = reason(i);
@@ -445,7 +341,7 @@ async function dealsFor(token, s) {
   const bin = bins[0];
   // Zweitgünstigster Sofortkauf: Verkaufspreis für die Gewinnrechnung, wenn das Angebot selbst das günstigste ist.
   if (bins[1]) market.nextBin = { price: Math.round(bins[1].price * 100) / 100, url: bins[1].url };
-  if (bin) market.cheapestBin = { price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
+  if (bin) market.cheapestBin = { id: bin.id, price: Math.round(bin.price * 100) / 100, url: bin.url, title: bin.title, isNew: bin.isNew };
   Object.assign(market, demand(s.label), { trend: trend(s.label, bin?.price) });
   // Die günstigsten verworfenen Sofortkäufe, soweit günstiger als der günstigste angezeigte.
   market.rejected = [...rejected.values()].filter((x) => !bin || x.price < bin.price)
@@ -543,7 +439,15 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
 }
 
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
-if (EBAY_CLIENT_ID && EBAY_CLIENT_SECRET) await writeFile(historyFile, JSON.stringify(history));
+if (EBAY_CLIENT_ID && EBAY_CLIENT_SECRET) {
+  await writeFile(historyFile, JSON.stringify(history));
+  // Marktwerte für den Schnellcheck: günstigster und zweitgünstigster Sofortkauf je Modell.
+  const markets = Object.fromEntries(result.markets.map((m) => [m.label, {
+    cheapestBin: m.cheapestBin ? { id: m.cheapestBin.id, price: m.cheapestBin.price } : null,
+    nextBin: m.nextBin ? { price: m.nextBin.price } : null,
+  }]));
+  await writeFile(new URL("markets.json", historyFile instanceof URL ? historyFile : pathToFileURL(resolve(historyFile))), JSON.stringify({ updatedAt: result.updatedAt, markets }));
+}
 await writeFile(statsFile, JSON.stringify({ updatedAt: result.updatedAt, models: buildStats() }));
 await writeFile(outFile, JSON.stringify(result, null, 2));
 console.log(`${result.deals.length} Angebote gespeichert, ${result.errors.length} Fehler.`);

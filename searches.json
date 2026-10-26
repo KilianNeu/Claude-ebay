@@ -13,6 +13,10 @@
     "packaging": 3,
     "feeRate": 0.11
   },
+  "notify": {
+    "minProfit": 30,
+    "maxAgeMinutes": 90
+  },
   "exclude": [
     "defekt",
     "bastler",

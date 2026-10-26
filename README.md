@@ -61,3 +61,20 @@ Ausschlusswörter) und eine kurze `note`. Globale Einstellungen:
 EBAY_CLIENT_ID=… EBAY_CLIENT_SECRET=… node scripts/fetch-deals.mjs
 python3 -m http.server   # dann http://localhost:8000
 ```
+
+## Schnellcheck mit Push-Benachrichtigung
+
+`scripts/quick-check.mjs` (Workflow „Schnellcheck“) sucht alle 5 Minuten neu eingestellte
+Sofort-Kaufen-Angebote – alle Modelle gebündelt in drei Oder-Suchen – und prüft sie mit denselben
+Filtern wie der stündliche Lauf (`scripts/lib.mjs`). Lohnt sich ein Weiterverkauf (Gewinn gegenüber
+dem günstigsten Sofortkauf mindestens `notify.minProfit`, Standard 30 €), kommt eine Nachricht über
+[ntfy](https://ntfy.sh). Jedes Angebot wird nur einmal gemeldet (Branch `notify`).
+
+Einrichten:
+
+1. ntfy-App installieren und ein Thema mit schwer erratbarem Namen abonnieren.
+2. Den Namen als Secret `NTFY_TOPIC` im Repo hinterlegen.
+3. Bei cron-job.org einen zweiten Job anlegen wie für den stündlichen Lauf, aber mit
+   `…/actions/workflows/quick.yml/dispatches` und Zeitplan alle 5 Minuten.
+
+Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.

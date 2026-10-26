@@ -1,0 +1,53 @@
+name: Schnellcheck
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"   # Reserve; zuverlässig alle 5 Minuten über cron-job.org
+
+permissions:
+  contents: write   # gemeldete Angebote auf den Branch "notify" schreiben
+
+concurrency:
+  group: quick
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Marktwerte und gemeldete Angebote laden
+        run: |
+          mkdir -p state
+          if git fetch --depth=1 origin data; then git show FETCH_HEAD:markets.json > state/markets.json || true; fi
+          if git fetch --depth=1 origin notify; then
+            git worktree add --detach notify FETCH_HEAD
+          else
+            git worktree add --orphan -b notify notify
+          fi
+      - name: Neue Angebote prüfen
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          MARKETS_FILE: state/markets.json
+          NOTIFIED_FILE: notify/notified.json
+        run: node scripts/quick-check.mjs
+      - name: Gemeldete Angebote speichern
+        working-directory: notify
+        run: |
+          [ -f notified.json ] || exit 0
+          [ -z "$(git status --porcelain notified.json)" ] && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Nur den aktuellen Stand behalten, damit der Branch nicht wächst
+          git checkout -q --orphan snapshot
+          git add notified.json
+          git commit -q -m "Gemeldete Angebote $(date -u +%FT%TZ)"
+          git push -q -f origin HEAD:refs/heads/notify
