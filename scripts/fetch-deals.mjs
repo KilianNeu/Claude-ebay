@@ -321,6 +321,10 @@ async function hybridBinPrice(token, i) {
   return total;
 }
 
+// Suchwörter ohne "rtx"/"rx"/"gtx": eBay verlangt jedes Suchwort im Titel, und Titel wie
+// "4070 ti Gigabyte Aero" fehlen sonst. Ob es wirklich das Modell ist, prüft modelPattern.
+const searchQuery = (s) => s.query.replace(/^(rtx|rx|gtx)\s+/i, "");
+
 async function dealsFor(token, s) {
   const terms = [...(config.exclude ?? []), ...(s.exclude ?? [])];
   // Defekte Karten doppelt ausschließen: per Zustandsfilter in der Suche und hier per Zustand 7000
@@ -355,8 +359,8 @@ async function dealsFor(token, s) {
   // Angebotspreis: Median der relevantesten Sofort-Kaufen-Angebote (ohne Zubehör, Defekte usw.).
   // Auktionen ohne Preisgrenze holen, damit auch teuer endende Auktionen in die Historie kommen.
   const [fixed, ending] = await Promise.all([
-    search(token, { q: s.query, filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "200" }).then(keep),
-    search(token, { q: s.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
+    search(token, { q: searchQuery(s), filter: `${where},buyingOptions:{FIXED_PRICE}`, limit: "200" }).then(keep),
+    search(token, { q: searchQuery(s), filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }).then(keep),
   ]);
   const refItems = binOnly(fixed);
   // Auktionen mit Sofort-Kaufen-Option aus beiden Suchen (ihr Sofort-Kaufen-Preis wird einzeln abgefragt)
@@ -400,7 +404,7 @@ async function dealsFor(token, s) {
     const floor = Math.min(...refs) * (config.floorRatio ?? 0);
     const cap = s.maxPrice ?? Math.max(...refs) * config.dealThreshold;
     cheapest = binOnly(keep(await search(token, {
-      q: s.query, filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "50",
+      q: searchQuery(s), filter: `price:[${Math.floor(floor)}..${Math.ceil(cap)}],${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "50",
     })));
     remember(cheapest, s);
     const seen = new Set();
@@ -428,7 +432,7 @@ async function dealsFor(token, s) {
   const hybrids = [];
   for (const i of hybridItems) {
     const total = await hybridBinPrice(token, i);
-    if (total != null) hybrids.push({ id: i.itemId, price: total, url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) });
+    if (total != null && total >= (s.minPrice ?? 0)) hybrids.push({ id: i.itemId, price: total, url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) });
   }
   const bins = [...refItems, ...cheapest]
     .map((i) => ({ id: i.itemId, price: totalPrice(i), url: i.itemAffiliateWebUrl ?? i.itemWebUrl, title: i.title, isNew: isNew(i) }))
