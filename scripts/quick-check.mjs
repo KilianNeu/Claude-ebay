@@ -39,6 +39,10 @@ for (const chunk of chunks) {
   for (const i of found) items.set(i.itemId, i);
 }
 
+// Zur Kontrolle: Alter der neuesten Angebote (zeigt, ob die Sortierung nach Einstelldatum greift).
+const ages = [...items.values()].map((i) => i.itemCreationDate ? Math.round((now - Date.parse(i.itemCreationDate)) / 60e3) : null);
+console.log(`Alter der ersten Treffer (Minuten): ${ages.slice(0, 5).join(", ")} … neuestes: ${Math.min(...ages.filter((x) => x != null))}`);
+
 const r = config.resale ?? { shipping: 0, packaging: 0, feeRate: 0 };
 const maxAge = (notify.maxAgeMinutes ?? 90) * 60e3;
 const hits = [];
