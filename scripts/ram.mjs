@@ -49,15 +49,17 @@ const SIZES = new Set([4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256]);
 export function parseRam(title) {
   const t = title.toLowerCase().replace(/,/g, ".");
   const ddr = /ddr5/.test(t) ? "ddr5" : /ddr4/.test(t) ? "ddr4" : null;
-  if (!ddr || /ddr3|ddr2/.test(t)) return null;
-  const form = /so-?dimm|sodimm|laptop|notebook|\bsod\b|260-?pin|262-?pin/.test(t) ? "sodimm" : "dimm";
+  if (!ddr || /ddr3|ddr2|ddr4\s*\/\s*5|ddr4.*ddr5|ddr5.*ddr4/.test(t)) return null;
+  // Variantenangebote ("4GB / 8GB / 16GB"): Preis gilt für die kleinste Variante → nicht vergleichbar
+  if (/\b\d{1,3}\s*(?:gb)?\s*\/\s*\d{1,3}\s*gb\b/.test(t)) return null;
+  const form = /s[o0]-?dimm|s[o0]dimm|laptop|notebook|\bsod\b|260-?pin|262-?pin/.test(t) ? "sodimm" : "dimm";
   // Kit: "2x16GB", "2 x 8 GB", "4x32 GB"; sonst Gesamtangabe "32GB" (größte plausible Zahl vor GB)
   let modules = 1, total = null, m;
   if ((m = t.match(/\b([1-8])\s*[x×]\s*(\d{1,3})\s*gb\b/))) [modules, total] = [Number(m[1]), Number(m[1]) * Number(m[2])];
   else if ((m = t.match(/\b(\d{1,3})\s*gb\s*[x×]\s*([1-8])\b/))) [modules, total] = [Number(m[2]), Number(m[1]) * Number(m[2])];
   else {
     const sizes = [...t.matchAll(/\b(\d{1,3})\s*gb\b/g)].map((x) => Number(x[1])).filter((v) => SIZES.has(v));
-    if (sizes.length) total = Math.max(...sizes);
+    if (sizes.length) total = sizes[0]; // erste Angabe; später folgen oft Vergleiche ("ähnlich wie 64GB")
   }
   if (!SIZES.has(total)) return null;
   // Takt: "3200MHz", "DDR4-3200", "6000 MT/s", "PC4-2666V", "PC4-25600" (÷ 8) oder eine übliche Taktzahl allein
