@@ -14,8 +14,12 @@ const config = JSON.parse(await readFile(new URL("../minipcs.json", import.meta.
 const outFile = new URL("../data/minipc.json", import.meta.url);
 // Artikelmerkmale (Prozessor, RAM, SSD) für Angebote ohne CPU im Titel, je Angebot nur einmal abgefragt
 const cacheFile = process.env.MINIPC_CACHE ?? "data/minipc-cache.json";
-const MAX_LOOKUPS = 80;
+// Preisstatistik: beobachtete Auktionen, Endpreise und stündliche Werte je CPU (ebenfalls im Branch data)
+const historyFile = process.env.MINIPC_HISTORY ?? "data/minipc-history.json";
+const statsFile = new URL("../data/minipc-stats.json", import.meta.url);
+const MAX_LOOKUPS = 80, MAX_SETTLE = 40, WINDOW = 30 * 864e5;
 const now = Date.now();
+await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 const round2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
 
@@ -303,11 +307,61 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     const sorted = g.sort((a, c) => a.total - c.total);
     return { cpu, ram, ssd, count: g.length, cheapest: round2(sorted[0].total), cheapestUrl: sorted[0].item.itemWebUrl, median: round(median(g.map((o) => o.total))) };
   }).sort((a, c) => c.count - a.count).slice(0, 40);
+  // ---- Preisstatistik ----
+  const hist = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({}));
+  hist.auctions ??= {}; hist.ended ??= []; hist.snapshots ??= [];
+  // Laufende Auktionen merken, samt geschätztem Wert – nach dem Ende zeigt der Vergleich, wie gut die Schätzung ist.
+  const seen = new Set();
+  for (const o of offers.filter((x) => x.auction)) {
+    const i = o.item, b = baseFor(o.cpu);
+    seen.add(i.itemId);
+    const known = o.specs.ram != null && o.specs.ssd != null;
+    hist.auctions[i.itemId] = {
+      title: i.title, url: i.itemWebUrl, family: o.family, cpu: o.cpu.id, ram: o.specs.ram, ssd: o.specs.ssd, barebone: o.specs.barebone,
+      endsAt: i.itemEndDate ?? null, bid: round2(o.total), bids: i.bidCount ?? 0,
+      value: b && known ? round(b.base + partsValue(o)) : hist.auctions[i.itemId]?.value ?? null,
+    };
+  }
+  // Beendete Auktionen: Endpreis per getItem (der zuletzt gesehene Stand ist in den letzten Minuten meist zu niedrig)
+  let settled = 0, sold = 0;
+  for (const [id, a] of Object.entries(hist.auctions)) {
+    const end = a.endsAt ? Date.parse(a.endsAt) : NaN;
+    if (seen.has(id) || !(end < now - 5 * 60e3)) continue;
+    if (settled >= MAX_SETTLE) break;
+    settled++;
+    const r = await getItem(token, id).catch(() => null);
+    if (!r) continue; // später erneut versuchen
+    let price = a.bid, bids = a.bids, res = "unknown";
+    if (!r.gone) {
+      const it = r.item, ship = num(it.shippingOptions?.[0]?.shippingCost);
+      bids = it.bidCount ?? 0;
+      price = round2(num(it.currentBidPrice ?? it.price) + (Number.isFinite(ship) ? ship : 0));
+      res = it.reservePriceMet === false ? "reserve" : bids > 0 ? "sold" : "nobids";
+    }
+    if (res === "sold") sold++;
+    hist.ended.unshift({ at: end, id, title: a.title, url: a.url, family: a.family, cpu: a.cpu, ram: a.ram, ssd: a.ssd, barebone: a.barebone,
+      price, bids, result: res, value: a.value });
+    delete hist.auctions[id];
+  }
+  for (const [id, a] of Object.entries(hist.auctions)) if (!a.endsAt || Date.parse(a.endsAt) < now - 7 * 864e5) delete hist.auctions[id];
+  hist.ended = hist.ended.filter((x) => x.at > now - WINDOW);
+  // Je Lauf und CPU: günstigster Sofortkauf, Barebone-Wert, Zahl der Angebote
+  const snap = {};
+  for (const c of result.cpus) if (c.offers) snap[c.cpu] = [c.cheapest, c.base, c.offers];
+  hist.snapshots.push({ t: now, c: snap });
+  hist.snapshots = hist.snapshots.filter((x) => x.t > now - WINDOW);
+  await writeFile(historyFile, JSON.stringify(hist));
+  console.log(`Statistik: ${Object.keys(hist.auctions).length} Auktionen beobachtet, ${settled} beendet geprüft (${sold} verkauft), `
+    + `${hist.ended.length} beendete in 30 Tagen, ${hist.snapshots.length} Stände.`);
+  const statsOut = { updatedAt: result.updatedAt, ended: hist.ended,
+    series: Object.fromEntries([...new Set(hist.snapshots.flatMap((x) => Object.keys(x.c)))].map((id) =>
+      [id, hist.snapshots.filter((x) => x.c[id]).map((x) => [x.t, ...x.c[id]])])) };
+  await writeFile(statsFile, JSON.stringify(statsOut));
+
   result.rejected = [...rejected.values()].sort((a, c) => a.price - c.price).slice(0, 15);
   result.offerCount = offers.length;
   console.log(`${offers.length} Mini-PCs ausgewertet, ${result.deals.length} Schnäppchen, ${result.cpus.length} CPUs.`);
 }
 
-await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 await writeFile(outFile, JSON.stringify(result, null, 2));
 for (const e of result.errors) console.warn("  " + e);

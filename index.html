@@ -102,7 +102,8 @@
   #cheaplog td a, #ended td a, #rejected td a, #mpRejected td a { white-space: normal; }
   .res-sold { color: var(--good); font-weight: 600; }
   /* Reiter */
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 8px 0 20px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 8px 0 20px; overflow-x: auto; scrollbar-width: none; }
+  .tab { white-space: nowrap; flex: none; }
   .tab { font: inherit; font-size: 15px; font-weight: 600; background: none; border: 0; color: var(--muted);
     padding: 10px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
   .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
@@ -139,9 +140,10 @@
   <div id="notice" class="notice" hidden></div>
 
   <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tabbtn-angebote" aria-controls="tab-angebote" data-tab="angebote">Angebote</button>
-    <button class="tab" role="tab" id="tabbtn-statistik" aria-controls="tab-statistik" data-tab="statistik">Preisstatistik</button>
+    <button class="tab" role="tab" id="tabbtn-angebote" aria-controls="tab-angebote" data-tab="angebote">GPUs</button>
+    <button class="tab" role="tab" id="tabbtn-statistik" aria-controls="tab-statistik" data-tab="statistik">GPU-Statistik</button>
     <button class="tab" role="tab" id="tabbtn-minipc" aria-controls="tab-minipc" data-tab="minipc">Mini-PCs</button>
+    <button class="tab" role="tab" id="tabbtn-ministat" aria-controls="tab-ministat" data-tab="ministat">Mini-PC-Statistik</button>
   </nav>
 
   <section id="tab-angebote" role="tabpanel" aria-labelledby="tabbtn-angebote">
@@ -157,9 +159,9 @@
       <option value="offer">Preisvorschlag möglich</option>
     </select>
     <select id="sort" aria-label="Sortierung">
+      <option value="ending">Endet bald</option>
       <option value="discount">Größter Rabatt</option>
       <option value="price">Niedrigster Preis</option>
-      <option value="ending">Endet bald</option>
       <option value="profit">Größter Gewinn</option>
     </select>
     <label class="toggle"><input type="checkbox" id="business"> Gewerblich verkaufen (eBay-Gebühren)</label>
@@ -274,10 +276,10 @@
       <option value="barebone">Nur Barebones</option>
     </select>
     <select id="mpSort" aria-label="Sortierung">
+      <option value="ending">Endet bald</option>
       <option value="profit">Größter Gewinn</option>
       <option value="discount">Größter Rabatt</option>
       <option value="price">Niedrigster Preis</option>
-      <option value="ending">Endet bald</option>
     </select>
   </div>
   <div class="grid" id="mpGrid"></div>
@@ -306,6 +308,34 @@
   </table></div>
   </section>
 
+  <section id="tab-ministat" role="tabpanel" aria-labelledby="tabbtn-ministat" hidden>
+  <h2>Mini-PC-Preisstatistik</h2>
+  <p class="sub" style="margin-bottom:12px">Jede beobachtete Mini-PC-Auktion wird nach dem Ende mit ihrem echten Endpreis erfasst
+    und mit dem geschätzten Wert (Barebone + RAM + SSD) zum Zeitpunkt der Auktion verglichen – so sieht man, ob die Schätzung trägt.</p>
+  <div class="controls" style="margin-top:0">
+    <select id="msCpu" aria-label="CPU"></select>
+  </div>
+  <div class="viz">
+    <div class="tiles" id="msTiles"></div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Preisverlauf</h3>
+    <div class="chartbox">
+      <div class="legend">
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round"/></svg>Günstigster verfügbarer Sofortkauf (beliebige Ausstattung)</span>
+        <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.5" fill="var(--series-2)"/></svg>Verkauf per Auktion</span>
+      </div>
+      <svg id="msChart" role="img" aria-label="Preisverlauf: günstigster Sofortkauf und Auktionsverkäufe"></svg>
+      <div class="tip" id="msTip" hidden></div>
+    </div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Beendete Auktionen</h3>
+    <div class="tablewrap">
+      <table class="sales">
+        <thead><tr><th>Ende</th><th>Endpreis inkl. Versand</th><th>Gebote</th><th>Ergebnis</th><th>Ausstattung</th><th>Geschätzter Wert</th><th>Angebot</th></tr></thead>
+        <tbody id="msEnded"></tbody>
+      </table>
+    </div>
+  </div>
+  </section>
+
   <footer>
     Daten über die eBay Browse API, aktualisiert per GitHub Action. Referenz ist der geschätzte Verkaufspreis
     (ab 5 beobachteten Verkäufen) oder sonst der Median der Sofort-Kaufen-Angebote – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
@@ -316,7 +346,7 @@
 <script>
 const EBAY = "https://www.ebay.de/sch/i.html";
 const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
-const state = { search: "all", type: "all", sort: "discount", deals: [], markets: {}, dealThreshold: 0.85, resale: { shipping: 7, packaging: 3, feeRate: 0.11 }, business: false };
+const state = { search: "all", type: "all", sort: "ending", deals: [], markets: {}, dealThreshold: 0.85, resale: { shipping: 7, packaging: 3, feeRate: 0.11 }, business: false };
 
 function ebayLinks(query, max) {
   const base = { _nkw: query, LH_PrefLoc: "1" };
@@ -348,6 +378,12 @@ function timeLeft(iso) {
   return `noch ${Math.max(1, Math.floor(ms / 6e4))} Min.`;
 }
 
+// Nach Ende sortieren; Angebote ohne Enddatum (Sofort-Kaufen) ans Ende, untereinander gleichrangig.
+function endOrder(a, b) {
+  const t = (d) => (d.endsAt ? Date.parse(d.endsAt) : Infinity);
+  return t(a) === t(b) ? 0 : t(a) - t(b);
+}
+
 function renderGrid() {
   const grid = document.getElementById("grid");
   let list = state.deals.filter((d) =>
@@ -357,7 +393,7 @@ function renderGrid() {
   const by = {
     discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
     price: (a, b) => a.total - b.total,
-    ending: (a, b) => (a.endsAt ? new Date(a.endsAt) : Infinity) - (b.endsAt ? new Date(b.endsAt) : Infinity),
+    ending: (a, b) => endOrder(a, b) || (b.discount ?? -1) - (a.discount ?? -1),
     profit: (a, b) => { const v = (d) => { const p = profitOf(d); return p && !p.longRunning ? p.value : -Infinity; }; return v(b) - v(a); },
   };
   list.sort(by[state.sort]);
@@ -640,7 +676,7 @@ function frame(svg, W, H, pad, ts, vs) {
     const t = svgEl("text", { x: pad.l - 6, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = eur.format(v).replace(",00", ""); svg.append(t);
   }
   const days = (x1 - x0) / 864e5;
-  const nTicks = Math.max(2, Math.min(6, Math.floor((W - pad.l) / 90)));
+  const nTicks = Math.max(2, Math.min(6, Math.floor((W - pad.l) / (days < 3 ? 120 : 80))));
   for (let i = 0; i < nTicks; i++) {
     const t = x0 + (x1 - x0) * i / (nTicks - 1);
     const lbl = svgEl("text", { x: X(t), y: H - 6, "text-anchor": i === 0 ? "start" : i === nTicks - 1 ? "end" : "middle" });
@@ -667,15 +703,20 @@ function placeTip(svg, tip, W, H, x, y) {
 
 
 function drawChart(m) {
-  const svg = document.getElementById("chart"), tip = document.getElementById("tip");
-  svg.replaceChildren(); tip.hidden = true;
-  const W = svg.clientWidth || 600, H = 260, pad = { l: 52, r: 12, t: 10, b: 24 };
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   // Linie: günstigster verfügbarer Sofortkauf je Lauf (Spalte 3); Punkte: echte Verkäufe.
   // Der Median der aktuellen Angebote ist als Marktpreis nicht aussagekräftig und wird nicht gezeigt.
   const line = m.series.filter((p) => p[3] != null).map((p) => [p[0], p[3], p[2]]);
-  const dots = m.sales.filter((x) => !line.length || x.t >= line[0][0] - 7 * 864e5);
-  if (!line.length && !dots.length) return emptyChart(svg, W, H);
+  const dots = m.sales.filter((x) => !line.length || x.t >= line[0][0] - 7 * 864e5)
+    .map((d) => ({ ...d, label: `${d.kind === "auction" ? "Auktion" : "Sofort-Kaufen"}: ${eur.format(d.price)}` }));
+  priceChart(document.getElementById("chart"), document.getElementById("tip"), line, dots);
+}
+
+// Preisdiagramm: line = [[Zeit, Preis]] (günstigster Sofortkauf), dots = [{ t, price, kind, label }] (Verkäufe).
+function priceChart(svg, tip, line, dots, empty) {
+  svg.replaceChildren(); tip.hidden = true;
+  const W = svg.clientWidth || 600, H = 260, pad = { l: 52, r: 12, t: 10, b: 24 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (!line.length && !dots.length) return emptyChart(svg, W, H, empty);
   const ts = [...line.map((p) => p[0]), ...dots.map((d) => d.t)];
   const vs = [...line.map((p) => p[1]), ...dots.map((d) => d.price)];
   const { X, Y } = frame(svg, W, H, pad, ts, vs);
@@ -697,7 +738,7 @@ function drawChart(m) {
   svg.append(cross, ring);
   const pts = [
     ...line.map((p) => ({ x: X(p[0]), y: Y(p[1]), html: `${dateFmt(p[0], true)} · günstigster Sofortkauf: ${eur.format(p[1])}` })),
-    ...dots.map((d) => ({ x: X(d.t), y: Y(d.price), html: `${dateFmt(d.t, true)} · ${d.kind === "auction" ? "Auktion" : "Sofort-Kaufen"}: ${eur.format(d.price)}` })),
+    ...dots.map((d) => ({ x: X(d.t), y: Y(d.price), html: `${dateFmt(d.t, true)} · ${d.label}` })),
   ];
   const hide = () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); ring.setAttribute("visibility", "hidden"); };
   svg.onpointerleave = hide;
@@ -756,8 +797,10 @@ async function load() {
 }
 load();
 // ---- Mini-PCs (eigene Daten: data/minipc.json) ----
-const mp = { data: null, family: "all", type: "all", sort: "profit" };
+const mp = { data: null, family: "all", type: "all", sort: "ending" };
 const gbText = (gb) => gb == null ? "?" : gb === 0 ? "ohne" : gb >= 1000 ? `${gb / 1000} TB` : `${gb} GB`;
+
+const cpuName = (id) => id.toUpperCase().replace(/^I(\d)/, "i$1").replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen").replace("GEN)", "Gen)");
 
 function mpCard(d) {
   const r = mp.data.resale ?? { shipping: 7, packaging: 3 };
@@ -768,7 +811,7 @@ function mpCard(d) {
     el("span", { class: "tag" + (d.auction ? " auction" : "") }, d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
     d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
     d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
-    el("span", { class: "tag" }, d.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("span", { class: "tag" }, cpuName(d.cpu)),
     el("span", { class: "tag" }, d.barebone ? "Barebone" : `${gbText(d.ram)} RAM · ${gbText(d.ssd)} SSD`),
     d.noPsu ? el("span", { class: "tag" }, "ohne Netzteil") : null,
     d.condition ? el("span", { class: "tag" }, d.condition) : null,
@@ -805,7 +848,7 @@ function mpRender() {
     && (!x.endsAt || Date.parse(x.endsAt) > Date.now()));
   const by = {
     profit: (a, b) => b.profit - a.profit, discount: (a, b) => b.discount - a.discount, price: (a, b) => a.total - b.total,
-    ending: (a, b) => (a.endsAt ? Date.parse(a.endsAt) : Infinity) - (b.endsAt ? Date.parse(b.endsAt) : Infinity),
+    ending: (a, b) => endOrder(a, b) || b.profit - a.profit,
   };
   list.sort(by[mp.sort]);
   document.getElementById("mpGrid").replaceChildren(...(list.length ? list.map(mpCard)
@@ -838,12 +881,12 @@ async function mpLoad() {
     tile("SSD NVMe", c.ssd.perGB ? `${euro0(c.ssd.perGB * 1000)} je TB` : "–", `${c.ssd.samples} Angebote`),
   ] : []));
   document.getElementById("mpCpus").replaceChildren(...d.cpus.map((x) => el("tr", {},
-    el("td", {}, x.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("td", {}, cpuName(x.cpu)),
     el("td", {}, x.base != null ? euro0(x.base) : "–", x.basis && x.basis !== x.cpu ? el("span", { style: "color:var(--muted)" }, ` (${x.basis})`) : null),
     el("td", {}, String(x.offers)),
     el("td", {}, x.cheapest != null ? euro0(x.cheapest) : "–"))));
   document.getElementById("mpGroups").replaceChildren(...(d.groups.length ? d.groups.map((g) => el("tr", {},
-    el("td", {}, g.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("td", {}, cpuName(g.cpu)),
     el("td", {}, gbText(g.ram === "?" ? null : Number(g.ram))), el("td", {}, gbText(g.ssd === "?" ? null : Number(g.ssd))),
     el("td", {}, String(g.count)), el("td", {}, euro0(g.median)),
     el("td", {}, el("a", { href: g.cheapestUrl, target: "_blank", rel: "noopener" }, euro0(g.cheapest)))))
@@ -858,15 +901,81 @@ document.getElementById("mpType").onchange = (e) => { mp.type = e.target.value; 
 document.getElementById("mpSort").onchange = (e) => { mp.sort = e.target.value; mpRender(); };
 mpLoad();
 
+// ---- Mini-PC-Statistik ----
+const ms = { data: null, cpu: "all" };
+
+function msRender() {
+  const d = ms.data;
+  if (!d) return;
+  const all = ms.cpu === "all";
+  const ended = d.ended.filter((x) => all || x.cpu === ms.cpu);
+  const soldList = ended.filter((x) => x.result === "sold");
+  const prices = soldList.map((x) => x.price);
+  const med = (v) => { if (!v.length) return null; const s = [...v].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const ratios = soldList.filter((x) => x.value).map((x) => x.price / x.value);
+  const cur = (mp.data?.cpus ?? []).find((x) => x.cpu === ms.cpu);
+  document.getElementById("msTiles").replaceChildren(
+    tile("Auktionen (30 Tage)", `${soldList.length} von ${ended.length} verkauft`, ended.length ? "beendete Auktionen mit Endpreis" : "noch keine beendet"),
+    tile("Endpreis (Median)", prices.length ? euro0(med(prices)) : "–", prices.length >= 2 ? `Spanne ${euro0(Math.min(...prices))} – ${euro0(Math.max(...prices))}` : "inkl. Versand"),
+    tile("Endpreis vs. Schätzung", ratios.length ? `${Math.round(med(ratios) * 100)} %` : "–",
+      ratios.length ? `Median über ${ratios.length} Verkäufe · 100 % = Schätzung trifft` : "noch keine Verkäufe mit Schätzung"),
+    all
+      ? tile("Beobachtete CPUs", String(Object.keys(d.series).length), "mit Sofort-Kaufen-Angeboten")
+      : tile("Jetzt", cur?.cheapest != null ? `ab ${euro0(cur.cheapest)}` : "–",
+        cur ? `${cur.offers} Sofortkäufe · Barebone-Wert ${cur.base != null ? euro0(cur.base) : "–"}` : "gerade keine Angebote"));
+
+  const RESULT = { sold: "verkauft", nobids: "keine Gebote", reserve: "Mindestpreis nicht erreicht", unknown: "Endpreis unbekannt" };
+  document.getElementById("msEnded").replaceChildren(...(ended.length ? ended.slice(0, 100).map((x) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, dateFmt(x.at, true)),
+    el("td", {}, x.price != null ? eur.format(x.price) : "–", x.result === "unknown" ? el("span", { style: "color:var(--muted)" }, " (zuletzt gesehen)") : null),
+    el("td", {}, String(x.bids ?? "–")),
+    el("td", { class: x.result === "sold" ? "res-sold" : "" }, RESULT[x.result] ?? x.result),
+    el("td", { style: "white-space:nowrap" }, `${cpuName(x.cpu)} · ${gbText(x.ram)} · ${gbText(x.ssd)}`, x.barebone ? " · Barebone" : ""),
+    el("td", { style: "white-space:nowrap" }, x.value ? euro0(x.value) : "–",
+      x.value && x.price != null && x.result === "sold" ? el("span", { style: "color:var(--muted)" }, ` (Endpreis ${Math.round(x.price / x.value * 100)} %)`) : null),
+    el("td", {}, el("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title ?? "ansehen"))))
+    : [el("tr", {}, el("td", { colspan: "7", style: "color:var(--muted)" }, "Noch keine beendeten Auktionen – jede endende Auktion kommt automatisch dazu."))]));
+
+  const line = all ? [] : (d.series[ms.cpu] ?? []).filter((p) => p[1] != null).map((p) => [p[0], p[1]]);
+  const dots = all ? [] : soldList.map((x) => ({ t: x.at, price: x.price, kind: "auction",
+    label: `Auktion: ${eur.format(x.price)} · ${gbText(x.ram)} RAM, ${gbText(x.ssd)} SSD` }));
+  priceChart(document.getElementById("msChart"), document.getElementById("msTip"), line, dots,
+    all ? ["Für den Verlauf oben eine CPU wählen."] : undefined);
+}
+
+async function msLoad() {
+  try {
+    const res = await fetch("data/minipc-stats.json", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    ms.data = await res.json();
+  } catch {
+    ms.data = { ended: [], series: {} };
+  }
+  // CPUs mit den meisten Daten zuerst
+  const score = {};
+  for (const [id, s] of Object.entries(ms.data.series)) score[id] = s.length / 100 + (s.at(-1)?.[3] ?? 0);
+  for (const x of ms.data.ended) score[x.cpu] = (score[x.cpu] ?? 0) + 5;
+  const sel = document.getElementById("msCpu");
+  sel.replaceChildren(el("option", { value: "all" }, "Alle CPUs"),
+    ...Object.keys(score).sort((a, b) => score[b] - score[a]).map((id) => el("option", { value: id }, cpuName(id))));
+  sel.onchange = () => { ms.cpu = sel.value; msRender(); };
+  msRender();
+  let w = 0;
+  addEventListener("resize", () => { const svg = document.getElementById("msChart"); if (svg.clientWidth && svg.clientWidth !== w) { w = svg.clientWidth; msRender(); } });
+}
+msLoad();
+
 function showTab(name) {
   if (!document.getElementById(`tab-${name}`)) name = "angebote";
   for (const b of document.querySelectorAll(".tab")) {
     const on = b.dataset.tab === name;
     b.setAttribute("aria-selected", String(on));
     document.getElementById(`tab-${b.dataset.tab}`).hidden = !on;
+    if (on) { const bar = b.parentElement; bar.scrollLeft += b.getBoundingClientRect().left - bar.getBoundingClientRect().left - 16; }
   }
   // Diagramm braucht die sichtbare Breite
   if (name === "statistik" && stats.current) renderStats();
+  if (name === "ministat") msRender();
 }
 for (const b of document.querySelectorAll(".tab")) {
   b.onclick = () => { history.replaceState(null, "", b.dataset.tab === "angebote" ? location.pathname : `#${b.dataset.tab}`); showTab(b.dataset.tab); };

@@ -45,6 +45,7 @@ jobs:
           EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           MINIPC_CACHE: history/minipc-cache.json
+          MINIPC_HISTORY: history/minipc-history.json
         run: node scripts/minipc.mjs
       - name: Preishistorie speichern
         working-directory: history
@@ -53,7 +54,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add history.json markets.json
-          [ -f minipc-cache.json ] && git add minipc-cache.json
+          for f in minipc-cache.json minipc-history.json; do [ -f $f ] && git add $f; done
           git diff --cached --quiet && exit 0
           # Nur den aktuellen Stand behalten (ein Commit), damit das Repo nicht mit jedem Lauf wächst
           git checkout -q --orphan snapshot
@@ -64,7 +65,7 @@ jobs:
           mkdir -p _site/data
           cp index.html searches.json _site/
           cp data/deals.json data/stats.json _site/data/
-          cp data/minipc.json _site/data/ 2>/dev/null || true
+          cp data/minipc.json data/minipc-stats.json _site/data/ 2>/dev/null || true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

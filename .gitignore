@@ -10,3 +10,5 @@ notify/
 history/
 data/minipc.json
 data/minipc-cache.json
+data/minipc-history.json
+data/minipc-stats.json

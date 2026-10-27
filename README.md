@@ -94,3 +94,8 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
   (SO-DIMM DDR4/DDR5, NVMe); der Barebone-Wert ist der Median aus Preis minus Bauteilwert über alle
   Angebote mit dieser CPU (bei weniger als `minCpuSamples` über CPU-Klasse und Generation)
 - Schnäppchen: Preis höchstens `dealThreshold` (85 %) des Marktwerts
+- Preisstatistik (Reiter „Mini-PC-Statistik“): Jede ausgewertete Auktion wird samt geschätztem Wert
+  gemerkt und nach dem Ende per getItem mit dem echten Endpreis erfasst (max. 40 je Lauf); dazu je
+  Lauf und CPU der günstigste Sofortkauf und der Barebone-Wert. Gespeichert in `minipc-history.json`
+  im Branch `data` (30 Tage), für die Seite als `data/minipc-stats.json`. „Endpreis vs. Schätzung“
+  zeigt, wie gut der geschätzte Marktwert die echten Verkäufe trifft
