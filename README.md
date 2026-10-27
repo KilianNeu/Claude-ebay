@@ -79,3 +79,16 @@ Einrichten:
    `…/actions/workflows/quick.yml/dispatches` und Zeitplan alle 5 Minuten.
 
 Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
+
+## Mini-PCs (eigene Kategorie)
+
+`scripts/minipc.mjs` mit eigener Konfiguration `minipcs.json`, unabhängig von den Grafikkarten
+(eigene Ausgabe `data/minipc.json`, Reiter „Mini-PCs“; im Workflow mit `continue-on-error`).
+
+- Baureihen: Intel/ASUS NUC, ThinkCentre Tiny, EliteDesk/ProDesk Mini, OptiPlex Micro, Esprimo Mini
+- höchstens 6 Jahre alt: Intel ab `minIntelGen` (11), AMD ab `minRyzenSeries` (5000)
+- CPU, RAM, SSD, Barebone und „ohne Netzteil“ werden aus dem Titel gelesen
+- Marktwert = Barebone-Wert der CPU + RAM × €/GB + SSD × €/GB. Die €/GB misst das Skript selbst
+  (SO-DIMM DDR4/DDR5, NVMe); der Barebone-Wert ist der Median aus Preis minus Bauteilwert über alle
+  Angebote mit dieser CPU (bei weniger als `minCpuSamples` über CPU-Klasse und Generation)
+- Schnäppchen: Preis höchstens `dealThreshold` (85 %) des Marktwerts

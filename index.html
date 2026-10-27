@@ -99,7 +99,7 @@
     padding: 6px 8px; border-radius: 6px; width: max-content; max-width: min(300px, 90%); transform: translate(-50%, -100%); }
   .empty-chart { color: var(--muted); padding: 40px 0; text-align: center; }
   .sales td { font-variant-numeric: tabular-nums; }
-  #cheaplog td a, #ended td a, #rejected td a { white-space: normal; }
+  #cheaplog td a, #ended td a, #rejected td a, #mpRejected td a { white-space: normal; }
   .res-sold { color: var(--good); font-weight: 600; }
   /* Reiter */
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 8px 0 20px; }
@@ -141,6 +141,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" id="tabbtn-angebote" aria-controls="tab-angebote" data-tab="angebote">Angebote</button>
     <button class="tab" role="tab" id="tabbtn-statistik" aria-controls="tab-statistik" data-tab="statistik">Preisstatistik</button>
+    <button class="tab" role="tab" id="tabbtn-minipc" aria-controls="tab-minipc" data-tab="minipc">Mini-PCs</button>
   </nav>
 
   <section id="tab-angebote" role="tabpanel" aria-labelledby="tabbtn-angebote">
@@ -256,6 +257,53 @@
       <tbody id="searches"></tbody>
     </table>
   </div>
+  </section>
+
+  <section id="tab-minipc" role="tabpanel" aria-labelledby="tabbtn-minipc" hidden>
+  <h2>Mini-PCs</h2>
+  <p class="sub" style="margin-bottom:12px">NUC, ThinkCentre Tiny, EliteDesk/ProDesk Mini, OptiPlex Micro und Esprimo Mini – höchstens 6 Jahre alt
+    (Intel ab 11. Generation, AMD ab Ryzen 5000). Marktwert = Barebone-Wert der CPU + RAM + SSD zu aktuellen eBay-Preisen;
+    Schnäppchen liegen mindestens 15 % darunter.</p>
+  <div class="status" id="mpStatus">Lade Mini-PCs …</div>
+  <div class="controls"><div class="chips" id="mpChips"></div></div>
+  <div class="controls">
+    <select id="mpType" aria-label="Angebotsformat">
+      <option value="all">Alle Formate</option>
+      <option value="bin">Nur Sofort-Kaufen</option>
+      <option value="auction">Nur Auktionen</option>
+      <option value="barebone">Nur Barebones</option>
+    </select>
+    <select id="mpSort" aria-label="Sortierung">
+      <option value="profit">Größter Gewinn</option>
+      <option value="discount">Größter Rabatt</option>
+      <option value="price">Niedrigster Preis</option>
+      <option value="ending">Endet bald</option>
+    </select>
+  </div>
+  <div class="grid" id="mpGrid"></div>
+
+  <h3 style="font-size:15px;margin:24px 0 8px">Bauteilpreise auf eBay</h3>
+  <div class="tiles" id="mpComponents"></div>
+
+  <h3 style="font-size:15px;margin:20px 0 8px">Barebone-Wert je CPU</h3>
+  <p class="sub" style="margin-bottom:8px">Angebotspreis minus RAM- und SSD-Wert, Median über alle Angebote mit dieser CPU
+    (bei wenigen Angeboten über die CPU-Klasse derselben Generation).</p>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>CPU</th><th>Barebone-Wert</th><th>Angebote</th><th>Günstigstes</th></tr></thead>
+    <tbody id="mpCpus"></tbody>
+  </table></div>
+
+  <h3 style="font-size:15px;margin:20px 0 8px">Häufige Konfigurationen</h3>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>CPU</th><th>RAM</th><th>SSD</th><th>Angebote</th><th>Median</th><th>Günstigstes</th></tr></thead>
+    <tbody id="mpGroups"></tbody>
+  </table></div>
+
+  <h3 style="font-size:15px;margin:20px 0 8px">Günstige Angebote, die ausgefiltert wurden</h3>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>Preis</th><th>Grund</th><th>Angebot</th></tr></thead>
+    <tbody id="mpRejected"></tbody>
+  </table></div>
   </section>
 
   <footer>
@@ -707,6 +755,109 @@ async function load() {
   renderGrid();
 }
 load();
+// ---- Mini-PCs (eigene Daten: data/minipc.json) ----
+const mp = { data: null, family: "all", type: "all", sort: "profit" };
+const gbText = (gb) => gb == null ? "?" : gb === 0 ? "ohne" : gb >= 1000 ? `${gb / 1000} TB` : `${gb} GB`;
+
+function mpCard(d) {
+  const r = mp.data.resale ?? { shipping: 7, packaging: 3 };
+  const longRunning = d.auction && d.endsAt && Date.parse(d.endsAt) - Date.now() > 864e5;
+  const margin = Math.max(15, d.value * 0.1);
+  const maxTotal = d.value - r.shipping - r.packaging - margin;
+  const meta = el("div", { class: "meta" },
+    el("span", { class: "tag" + (d.auction ? " auction" : "") }, d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
+    d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
+    d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
+    el("span", { class: "tag" }, d.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("span", { class: "tag" }, d.barebone ? "Barebone" : `${gbText(d.ram)} RAM · ${gbText(d.ssd)} SSD`),
+    d.noPsu ? el("span", { class: "tag" }, "ohne Netzteil") : null,
+    d.condition ? el("span", { class: "tag" }, d.condition) : null,
+    d.seller?.score != null ? el("span", { class: "tag" }, `Verkäufer: ${d.seller.score} Bew.`) : null);
+  const rows = [
+    el("div", { class: "profit" + (d.profit > 0 && !longRunning ? "" : " neg") },
+      el("span", {}, longRunning ? "Gewinn beim aktuellen Gebot (Zwischenstand)" : d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
+        el("span", { class: "why" }, `Marktwert ${euro0(d.value)} − Versand/Verpackung ${euro0(r.shipping + r.packaging)}`)),
+      el("b", {}, longRunning ? "offen" : `${d.profit >= 0 ? "+" : "−"}${euro0(Math.abs(d.profit))}`)),
+    el("div", { class: "mkrow" }, el("span", {}, `Barebone (${d.baseBasis}, ${d.baseCount}×)`), el("b", {}, euro0(d.base))),
+    el("div", { class: "mkrow" }, el("span", {}, `RAM ${gbText(d.ram)} ${d.ddr.toUpperCase()}`), el("b", {}, euro0(d.ramValue))),
+    el("div", { class: "mkrow" }, el("span", {}, `SSD ${gbText(d.ssd)}`), el("b", {}, euro0(d.ssdValue))),
+    d.sameConfig ? el("div", { class: "mkrow" }, el("span", {}, "Gleiche Konfiguration sonst ab"),
+      el("a", { href: d.sameConfig.url, target: "_blank", rel: "noopener" }, `${euro0(d.sameConfig.price)} ansehen ›`)) : null,
+    d.auction && maxTotal > 0 ? el("div", { class: maxTotal > d.total ? "hint good" : "hint bad" },
+      `Lohnendes Maximalgebot: ${euro0(maxTotal - (d.shipping ?? 0))}` + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")) : null,
+  ];
+  return el("article", { class: "card" },
+    el("a", { class: "cardlink", href: d.url, target: "_blank", rel: "noopener" },
+      el("div", { class: "thumb", style: d.image ? `background-image:url("${encodeURI(d.image)}")` : "" },
+        d.discount > 0 ? el("span", { class: "badge" }, `−${d.discount} %`) : null),
+      el("div", { class: "body" },
+        el("div", { class: "title" }, d.title), meta,
+        el("div", { class: "price" }, eur.format(d.total)),
+        el("div", { class: "ref" }, `inkl. Versand · ${d.family}`))),
+    el("div", { class: "mkwrap" }, el("div", { class: "mk" }, ...rows)));
+}
+
+function mpRender() {
+  const d = mp.data;
+  if (!d) return;
+  let list = d.deals.filter((x) => (mp.family === "all" || x.family === mp.family)
+    && (mp.type === "all" || (mp.type === "barebone" ? x.barebone : (mp.type === "auction") === x.auction))
+    && (!x.endsAt || Date.parse(x.endsAt) > Date.now()));
+  const by = {
+    profit: (a, b) => b.profit - a.profit, discount: (a, b) => b.discount - a.discount, price: (a, b) => a.total - b.total,
+    ending: (a, b) => (a.endsAt ? Date.parse(a.endsAt) : Infinity) - (b.endsAt ? Date.parse(b.endsAt) : Infinity),
+  };
+  list.sort(by[mp.sort]);
+  document.getElementById("mpGrid").replaceChildren(...(list.length ? list.map(mpCard)
+    : [el("p", { class: "empty" }, d.deals.length ? "Keine Angebote für diesen Filter." : "Gerade keine Schnäppchen.")]));
+  const counts = {};
+  for (const x of d.deals) counts[x.family] = (counts[x.family] ?? 0) + 1;
+  document.getElementById("mpChips").replaceChildren(...[["all", `Alle (${d.deals.length})`], ...d.families.map((f) => [f, `${f} (${counts[f] ?? 0})`])].map(([key, text]) => {
+    const b = el("button", { class: "chip", "aria-pressed": String(mp.family === key) }, text);
+    b.onclick = () => { mp.family = key; mpRender(); };
+    return b;
+  }));
+}
+
+async function mpLoad() {
+  try {
+    const res = await fetch("data/minipc.json", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    mp.data = await res.json();
+  } catch {
+    document.getElementById("mpStatus").textContent = "Noch keine Mini-PC-Daten – sie kommen mit dem nächsten stündlichen Lauf.";
+    return;
+  }
+  const d = mp.data;
+  document.getElementById("mpStatus").textContent = `Stand: ${new Date(d.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}`
+    + ` · ${d.offerCount ?? 0} Mini-PCs ausgewertet · ${d.deals.length} Schnäppchen`;
+  const c = d.components;
+  document.getElementById("mpComponents").replaceChildren(...(c ? [
+    tile("RAM DDR4 (SO-DIMM)", c.ddr4.perGB ? `${String(c.ddr4.perGB).replace(".", ",")} €/GB` : "–", `16 GB ≈ ${euro0(16 * (c.ddr4.perGB ?? 0))} · ${c.ddr4.samples} Angebote`),
+    tile("RAM DDR5 (SO-DIMM)", c.ddr5.perGB ? `${String(c.ddr5.perGB).replace(".", ",")} €/GB` : "–", `16 GB ≈ ${euro0(16 * (c.ddr5.perGB ?? 0))} · ${c.ddr5.samples} Angebote`),
+    tile("SSD NVMe", c.ssd.perGB ? `${euro0(c.ssd.perGB * 1000)} je TB` : "–", `${c.ssd.samples} Angebote`),
+  ] : []));
+  document.getElementById("mpCpus").replaceChildren(...d.cpus.map((x) => el("tr", {},
+    el("td", {}, x.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("td", {}, x.base != null ? euro0(x.base) : "–", x.basis && x.basis !== x.cpu ? el("span", { style: "color:var(--muted)" }, ` (${x.basis})`) : null),
+    el("td", {}, String(x.offers)),
+    el("td", {}, x.cheapest != null ? euro0(x.cheapest) : "–"))));
+  document.getElementById("mpGroups").replaceChildren(...(d.groups.length ? d.groups.map((g) => el("tr", {},
+    el("td", {}, g.cpu.toUpperCase().replace("ULTRA", "Ultra").replace("RYZEN", "Ryzen")),
+    el("td", {}, gbText(g.ram === "?" ? null : Number(g.ram))), el("td", {}, gbText(g.ssd === "?" ? null : Number(g.ssd))),
+    el("td", {}, String(g.count)), el("td", {}, euro0(g.median)),
+    el("td", {}, el("a", { href: g.cheapestUrl, target: "_blank", rel: "noopener" }, euro0(g.cheapest)))))
+    : [el("tr", {}, el("td", { colspan: "6", style: "color:var(--muted)" }, "Noch keine Konfiguration mit mehreren Angeboten."))]));
+  document.getElementById("mpRejected").replaceChildren(...(d.rejected.length ? d.rejected.map((x) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, eur.format(x.price)), el("td", {}, x.reason),
+    el("td", {}, el("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title))))
+    : [el("tr", {}, el("td", { colspan: "3", style: "color:var(--muted)" }, "Keine."))]));
+  mpRender();
+}
+document.getElementById("mpType").onchange = (e) => { mp.type = e.target.value; mpRender(); };
+document.getElementById("mpSort").onchange = (e) => { mp.sort = e.target.value; mpRender(); };
+mpLoad();
+
 function showTab(name) {
   if (!document.getElementById(`tab-${name}`)) name = "angebote";
   for (const b of document.querySelectorAll(".tab")) {
