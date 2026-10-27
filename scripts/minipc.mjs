@@ -155,10 +155,13 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
         search(token, { q: f.query, filter: `${where},buyingOptions:{AUCTION}`, sort: "endingSoonest", limit: "50" }),
       ]);
       let kept = 0;
+      const reasons = {};
       for (const i of [...fixed, ...auctions]) {
         if (offers.some((o) => o.item.itemId === i.itemId)) continue;
         const reason = rejectReason(i, f);
         if (reason) {
+          const kind = reason.replace(/ \(.*\)$|„.*“|\d+/g, "").trim();
+          reasons[kind] = (reasons[kind] ?? 0) + 1;
           if (!/Baureihe|CPU nicht|Mindestpreis/.test(reason) && !i.buyingOptions?.includes("AUCTION")) {
             rejected.set(i.itemId, { price: round2(totalPrice(i)), title: i.title, url: i.itemWebUrl, reason, family: f.label });
           }
@@ -169,7 +172,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
         offers.push({ item: i, family: f.label, cpu, specs, ddr: ddrFor(cpu, specs), total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
         kept++;
       }
-      console.log(`  ${f.label}: ${fixed.length + auctions.length} gefunden, ${kept} ausgewertet`);
+      console.log(`  ${f.label}: ${fixed.length + auctions.length} gefunden, ${kept} ausgewertet – verworfen: `
+        + Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", "));
     } catch (e) {
       result.errors.push(e.message);
     }

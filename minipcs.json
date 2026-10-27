@@ -10,27 +10,99 @@
   "dealThreshold": 0.85,
   "floorRatio": 0.4,
   "minCpuSamples": 3,
-  "resale": { "shipping": 7, "packaging": 3 },
+  "resale": {
+    "shipping": 7,
+    "packaging": 3
+  },
   "exclude": [
-    "defekt", "defekte", "bastler", "bastlerware", "ersatzteil", "ersatzteile", "reparatur", "kein bild", "startet nicht",
-    "ohne cpu", "ohne prozessor", "bios passwort", "bios-passwort", "bios gesperrt", "passwort gesperrt", "gesperrt",
-    "computrace", "nur gehäuse", "gehäuse ohne", "leergehäuse", "mainboard", "motherboard", "platine",
-    "halterung", "vesa-halterung", "wandhalterung", "kühler", "nur netzteil",
-    "konvolut", "lot", "stück", "stk", "paket", "sammlung",
-    "laptop", "notebook", "thinkpad", "elitebook", "latitude", "probook",
-    "uk", "import", "zoll", "china"
+    "defekt",
+    "defekte",
+    "bastler",
+    "bastlerware",
+    "ersatzteil",
+    "ersatzteile",
+    "reparatur",
+    "kein bild",
+    "startet nicht",
+    "ohne cpu",
+    "ohne prozessor",
+    "bios passwort",
+    "bios-passwort",
+    "bios gesperrt",
+    "passwort gesperrt",
+    "gesperrt",
+    "computrace",
+    "nur gehäuse",
+    "gehäuse ohne",
+    "leergehäuse",
+    "mainboard",
+    "motherboard",
+    "platine",
+    "halterung",
+    "vesa-halterung",
+    "wandhalterung",
+    "kühler",
+    "nur netzteil",
+    "konvolut",
+    "lot",
+    "stück",
+    "stk",
+    "paket",
+    "sammlung",
+    "laptop",
+    "notebook",
+    "thinkpad",
+    "elitebook",
+    "latitude",
+    "probook",
+    "uk",
+    "import",
+    "zoll",
+    "china"
   ],
   "families": [
-    { "label": "Intel/ASUS NUC", "query": "nuc", "require": "\\bnuc" },
-    { "label": "Lenovo ThinkCentre Tiny", "query": "thinkcentre", "require": "tiny|\\bm\\d{2,3}q\\b" },
-    { "label": "HP EliteDesk/ProDesk Mini", "query": "hp mini", "require": "(elitedesk|prodesk|elite)\\b.*\\bmini\\b|\\bmini\\b.*(elitedesk|prodesk)" },
-    { "label": "Dell OptiPlex Micro", "query": "optiplex", "require": "micro|\\bmff\\b" },
-    { "label": "Fujitsu Esprimo Mini", "query": "esprimo", "require": "\\bg\\d{3,4}\\b|mini" }
+    {
+      "label": "Intel/ASUS NUC",
+      "query": "nuc",
+      "require": "\\bnuc"
+    },
+    {
+      "label": "Lenovo ThinkCentre Tiny",
+      "query": "thinkcentre",
+      "require": "tiny|\\bm\\d{2,3}q\\b"
+    },
+    {
+      "label": "HP EliteDesk/ProDesk Mini",
+      "query": "hp mini",
+      "require": "(elitedesk|prodesk|elite)\\b.*\\bmini\\b|\\bmini\\b.*(elitedesk|prodesk)"
+    },
+    {
+      "label": "Dell OptiPlex Micro",
+      "query": "optiplex",
+      "require": "micro|\\bmff\\b"
+    },
+    {
+      "label": "Fujitsu Esprimo Mini",
+      "query": "esprimo",
+      "require": "\\b[gq]\\d{3,4}\\b|mini"
+    }
   ],
   "components": [
-    { "kind": "ddr4", "query": "ddr4 sodimm" },
-    { "kind": "ddr5", "query": "ddr5 sodimm" },
-    { "kind": "ssd", "query": "nvme ssd 1tb" },
-    { "kind": "ssd", "query": "nvme ssd 512gb" }
+    {
+      "kind": "ddr4",
+      "query": "ddr4 sodimm"
+    },
+    {
+      "kind": "ddr5",
+      "query": "ddr5 sodimm"
+    },
+    {
+      "kind": "ssd",
+      "query": "nvme ssd 1tb"
+    },
+    {
+      "kind": "ssd",
+      "query": "nvme ssd 512gb"
+    }
   ]
 }
