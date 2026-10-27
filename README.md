@@ -99,3 +99,11 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
   Lauf und CPU der günstigste Sofortkauf und der Barebone-Wert. Gespeichert in `minipc-history.json`
   im Branch `data` (30 Tage), für die Seite als `data/minipc-stats.json`. „Endpreis vs. Schätzung“
   zeigt, wie gut der geschätzte Marktwert die echten Verkäufe trifft
+- Modellnamen → CPU: Steht die CPU nicht im Titel, wertet das Skript den Modellnamen aus. Die feste
+  Tabelle steht je Baureihe unter `models` in `minipcs.json` (Muster, Generation, bei NUCs die genaue
+  CPU je Klasse, z. B. NUC12WSHi7 → i7-1260P). Zu alte Modelle (M920q, 800 G6 …) fliegen so ohne
+  Nachschlagen raus; bei bekannter Klasse („M70q Gen 3 i5“) wird über Klasse und Generation bewertet.
+  Zusätzlich lernt das Skript aus Angeboten mit Modell und CPU im Titel (gespeichert in
+  `minipc-history.json`): Stecken in mindestens 3 Angeboten eines Modells zu ≥ 80 % dieselbe CPU,
+  gilt sie als Vermutung („vermutet“ auf der Karte, zählt nicht in den Barebone-Wert); bei freiem
+  Abfragebudget wird die Vermutung per Artikelmerkmale geprüft

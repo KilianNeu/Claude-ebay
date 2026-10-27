@@ -64,27 +64,230 @@
     {
       "label": "Intel/ASUS NUC",
       "query": "nuc",
-      "require": "\\bnuc"
+      "require": "\\bnuc",
+      "models": [
+        {
+          "label": "NUC 14 Pro",
+          "pattern": "\\bnuc\\s*14\\s*pro|\\bnuc14rv",
+          "gen": 14,
+          "cpus": {
+            "u5": "ultra 5 125h",
+            "u7": "ultra 7 155h"
+          }
+        },
+        {
+          "label": "NUC 13 Pro",
+          "pattern": "\\bnuc\\s*13\\s*pro|\\bnuc13an",
+          "gen": 13,
+          "cpus": {
+            "i3": "i3-1315u",
+            "i5": "i5-1340p",
+            "i7": "i7-1360p"
+          }
+        },
+        {
+          "label": "NUC 12 Pro",
+          "pattern": "\\bnuc\\s*12\\s*pro|\\bnuc12ws",
+          "gen": 12,
+          "cpus": {
+            "i3": "i3-1220p",
+            "i5": "i5-1240p",
+            "i7": "i7-1260p"
+          }
+        },
+        {
+          "label": "NUC 12 Enthusiast",
+          "pattern": "\\bnuc12snk|serpent canyon",
+          "gen": 12,
+          "cpus": {
+            "i7": "i7-12700h"
+          }
+        },
+        {
+          "label": "NUC 11 Pro",
+          "pattern": "\\bnuc\\s*11\\s*pro|\\bnuc11tn",
+          "gen": 11,
+          "cpus": {
+            "i3": "i3-1115g4",
+            "i5": "i5-1135g7",
+            "i7": "i7-1165g7"
+          }
+        },
+        {
+          "label": "NUC 11 Performance",
+          "pattern": "\\bnuc11pa|panther canyon",
+          "gen": 11,
+          "cpus": {
+            "i3": "i3-1115g4",
+            "i5": "i5-1135g7",
+            "i7": "i7-1165g7"
+          }
+        },
+        {
+          "label": "NUC 11 Enthusiast",
+          "pattern": "\\bnuc11ph|phantom canyon",
+          "gen": 11,
+          "cpus": {
+            "i7": "i7-1165g7"
+          }
+        },
+        {
+          "label": "NUC $1",
+          "pattern": "\\bnuc\\s*(1[1-4])(?!\\s*[gt]b|\\d)",
+          "gen": {
+            "from": 1
+          }
+        },
+        {
+          "label": "NUC $1",
+          "pattern": "\\bnuc\\s*(10|[5-9])\\s*i[3579]",
+          "gen": {
+            "from": 1
+          }
+        }
+      ]
     },
     {
       "label": "Lenovo ThinkCentre Tiny",
       "query": "thinkcentre",
-      "require": "tiny|\\bm\\d{2,3}q\\b"
+      "require": "tiny|\\bm\\d{2,3}q\\b",
+      "models": [
+        {
+          "label": "ThinkCentre M75q Gen 1",
+          "pattern": "\\bm75q[^0-9]{0,15}?(?:gen\\.?|g)\\s*1\\b|\\bm75q-1\\b",
+          "gen": 3000,
+          "vendor": "amd"
+        },
+        {
+          "label": "ThinkCentre M$1q Gen $2",
+          "pattern": "\\bm([789]0)q\\b[^0-9]{0,15}?(?:gen\\.?|g)\\s*([1-5])\\b",
+          "gen": {
+            "from": 2,
+            "map": {
+              "1": 10,
+              "2": 11,
+              "3": 12,
+              "4": 13,
+              "5": 14
+            }
+          }
+        },
+        {
+          "label": "ThinkCentre M$1q Gen 1",
+          "pattern": "^(?!.*\\bgen).*\\bm([789]0)q\\b",
+          "gen": 10
+        },
+        {
+          "label": "ThinkCentre M$1q",
+          "pattern": "\\bm([79]10)q\\b",
+          "gen": 7
+        },
+        {
+          "label": "ThinkCentre M$1",
+          "pattern": "\\bm([79]20[qx])\\b",
+          "gen": 8
+        },
+        {
+          "label": "ThinkCentre M715q",
+          "pattern": "\\bm715q\\b",
+          "gen": 2000,
+          "vendor": "amd"
+        },
+        {
+          "label": "ThinkCentre M$1 Gen $2",
+          "pattern": "\\bm(\\d{2,3}q)\\b[^0-9]{0,15}?(?:gen\\.?|g)\\s*(\\d)\\b"
+        },
+        {
+          "label": "ThinkCentre M$1",
+          "pattern": "\\bm(\\d{2,3}q)\\b"
+        }
+      ]
     },
     {
       "label": "HP EliteDesk/ProDesk Mini",
       "query": "hp mini",
-      "require": "(elitedesk|prodesk|elite)\\b.*\\bmini\\b|\\bmini\\b.*(elitedesk|prodesk)"
+      "require": "(elitedesk|prodesk|elite)\\b.*\\bmini\\b|\\bmini\\b.*(elitedesk|prodesk)",
+      "models": [
+        {
+          "label": "HP $1 G$2",
+          "pattern": "(?:elitedesk|prodesk|elite|pro|hp)[^0-9]{0,15}([478]05)\\s*g([4-8])\\b",
+          "gen": {
+            "from": 2,
+            "map": {
+              "4": 2000,
+              "5": 3000,
+              "6": 4000,
+              "8": 5000
+            }
+          },
+          "vendor": "amd"
+        },
+        {
+          "label": "HP $1 G$2",
+          "pattern": "(?:elitedesk|prodesk|elite|pro|hp)[^0-9]{0,15}([468]00)\\s*g([3-9])\\b",
+          "gen": {
+            "from": 2,
+            "map": {
+              "3": 6,
+              "4": 8,
+              "5": 8,
+              "6": 10,
+              "8": 11,
+              "9": 12
+            }
+          }
+        }
+      ]
     },
     {
       "label": "Dell OptiPlex Micro",
       "query": "optiplex",
-      "require": "micro|\\bmff\\b"
+      "require": "micro|\\bmff\\b",
+      "models": [
+        {
+          "label": "OptiPlex $10$20",
+          "pattern": "optiplex\\s*(?:micro\\s*(?:plus\\s*)?)?([357])0([5-8])0\\b",
+          "gen": {
+            "from": 2,
+            "map": {
+              "5": 7,
+              "6": 8,
+              "7": 9,
+              "8": 10
+            }
+          }
+        },
+        {
+          "label": "OptiPlex $1000",
+          "pattern": "optiplex\\s*(?:micro\\s*(?:plus\\s*)?)?([357])000\\b",
+          "gen": 12
+        },
+        {
+          "label": "OptiPlex $1",
+          "pattern": "optiplex\\s*(?:micro\\s*(?:plus\\s*)?)?([357]0[129]0)\\b"
+        }
+      ]
     },
     {
       "label": "Fujitsu Esprimo Mini",
       "query": "esprimo",
-      "require": "\\b[gq]\\d{3,4}\\b|mini"
+      "require": "\\b[gq]\\d{3,4}\\b|mini",
+      "models": [
+        {
+          "label": "Esprimo $1$20$3",
+          "pattern": "\\b([gq])(\\d)0(1[0-4])\\b",
+          "gen": {
+            "from": 3
+          }
+        },
+        {
+          "label": "Esprimo $1$2",
+          "pattern": "\\b([gq])(\\d{2}([5-8]))\\b",
+          "gen": {
+            "from": 3
+          }
+        }
+      ]
     }
   ],
   "components": [

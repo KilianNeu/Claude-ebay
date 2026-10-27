@@ -295,6 +295,15 @@
     <tbody id="mpCpus"></tbody>
   </table></div>
 
+  <h3 style="font-size:15px;margin:20px 0 8px">Modellnamen → CPU</h3>
+  <p class="sub" style="margin-bottom:8px">Steht die CPU nicht im Titel, hilft der Modellname: Die Generation kommt aus einer festen Tabelle
+    (bei NUCs mit Klasse sogar die genaue CPU), dazu lernt das Skript aus Angeboten, die Modell und CPU nennen. Eine gelernte CPU gilt ab
+    3 Angeboten und 80 % Anteil als Vermutung.</p>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>Modell</th><th>Generation (Tabelle)</th><th>Beobachtete CPUs</th><th>Über Modell erkannt</th><th>Als zu alt aussortiert</th></tr></thead>
+    <tbody id="mpModels"></tbody>
+  </table></div>
+
   <h3 style="font-size:15px;margin:20px 0 8px">Häufige Konfigurationen</h3>
   <div class="tablewrap"><table class="sales">
     <thead><tr><th>CPU</th><th>RAM</th><th>SSD</th><th>Angebote</th><th>Median</th><th>Günstigstes</th></tr></thead>
@@ -811,7 +820,7 @@ function mpCard(d) {
     el("span", { class: "tag" + (d.auction ? " auction" : "") }, d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
     d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
     d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
-    el("span", { class: "tag" }, cpuName(d.cpu)),
+    el("span", { class: "tag", title: d.cpuSource ?? "" }, cpuName(d.cpu), d.cpuGuessed ? " (vermutet)" : ""),
     el("span", { class: "tag" }, d.barebone ? "Barebone" : `${gbText(d.ram)} RAM · ${gbText(d.ssd)} SSD`),
     d.noPsu ? el("span", { class: "tag" }, "ohne Netzteil") : null,
     d.condition ? el("span", { class: "tag" }, d.condition) : null,
@@ -821,6 +830,7 @@ function mpCard(d) {
       el("span", {}, longRunning ? "Gewinn beim aktuellen Gebot (Zwischenstand)" : d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
         el("span", { class: "why" }, `Marktwert ${euro0(d.value)} − Versand/Verpackung ${euro0(r.shipping + r.packaging)}`)),
       el("b", {}, longRunning ? "offen" : `${d.profit >= 0 ? "+" : "−"}${euro0(Math.abs(d.profit))}`)),
+    d.cpuGuessed ? el("div", { class: "mkrow" }, el("span", { style: "color:var(--muted)" }, `CPU nicht angegeben, ${d.cpuSource} – vor dem Kauf prüfen`)) : null,
     el("div", { class: "mkrow" }, el("span", {}, `Barebone (${d.baseBasis}, ${d.baseCount}×)`), el("b", {}, euro0(d.base))),
     el("div", { class: "mkrow" }, el("span", {}, `RAM ${gbText(d.ram)} ${d.ddr.toUpperCase()}`), el("b", {}, euro0(d.ramValue))),
     el("div", { class: "mkrow" }, el("span", {}, `SSD ${gbText(d.ssd)}`), el("b", {}, euro0(d.ssdValue))),
@@ -885,6 +895,14 @@ async function mpLoad() {
     el("td", {}, x.base != null ? euro0(x.base) : "–", x.basis && x.basis !== x.cpu ? el("span", { style: "color:var(--muted)" }, ` (${x.basis})`) : null),
     el("td", {}, String(x.offers)),
     el("td", {}, x.cheapest != null ? euro0(x.cheapest) : "–"))));
+  const genText = (g) => g == null ? "–" : g >= 1000 ? `Ryzen ${g}er` : `${g}. Gen`;
+  document.getElementById("mpModels").replaceChildren(...((d.models ?? []).length ? d.models.map((x) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, x.model),
+    el("td", {}, genText(x.gen)),
+    el("td", {}, x.cpus.length ? x.cpus.map(([id, n]) => `${cpuName(id)} (${n})`).join(", ") : "–"),
+    el("td", {}, String(x.viaModel)),
+    el("td", {}, String(x.tooOld))))
+    : [el("tr", {}, el("td", { colspan: "5", style: "color:var(--muted)" }, "Noch keine Daten."))]));
   document.getElementById("mpGroups").replaceChildren(...(d.groups.length ? d.groups.map((g) => el("tr", {},
     el("td", {}, cpuName(g.cpu)),
     el("td", {}, gbText(g.ram === "?" ? null : Number(g.ram))), el("td", {}, gbText(g.ssd === "?" ? null : Number(g.ssd))),

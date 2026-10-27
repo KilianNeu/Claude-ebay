@@ -59,6 +59,68 @@ export function parseCpu(title) {
   return null;
 }
 
+// ---- Modellnamen (NUC12WSHi7, M70q Gen 3, EliteDesk 800 G9, OptiPlex 7080, Esprimo Q7010) ----
+// Feste Tabelle je Baureihe in minipcs.json ("models"): Muster, Generation, bei NUCs die genaue CPU je Klasse.
+// Dazu lernt das Skript aus Angeboten, die Modell und CPU nennen, welche CPUs in welchem Modell stecken.
+
+const modelGens = {}; // Generation laut Tabelle je erkanntem Modell (für die Übersicht)
+const modelOld = {};  // je Modell: wie oft als zu alt aussortiert, ohne Nachschlagen
+
+export function parseModel(text, family) {
+  const t = text.toLowerCase();
+  for (const e of family.models ?? []) {
+    const m = t.match(new RegExp(e.pattern));
+    if (!m) continue;
+    let gen = null;
+    if (typeof e.gen === "number") gen = e.gen;
+    else if (e.gen) gen = e.gen.map ? e.gen.map[m[e.gen.from]] ?? null : Number(m[e.gen.from]);
+    const label = e.label.replace(/\$(\d)/g, (_, n) => ((m[n] ?? "").length === 1 ? m[n].toUpperCase() : m[n] ?? ""));
+    if (gen != null) modelGens[label] = gen;
+    return { key: label, gen, vendor: e.vendor ?? "intel", cpus: e.cpus ?? null };
+  }
+  return null;
+}
+
+// CPU-Klasse ohne Modellnummer: "i5", "Core i7", im NUC-Code "NUC12WSHi5", "Ultra 7" / "NUC14RVHu7"
+function tierOf(text) {
+  const t = text.toLowerCase();
+  const m = t.match(/\bi([3579])\b/) ?? t.match(/\bnuc\w*?i([3579])/);
+  if (m) return `i${m[1]}`;
+  const u = t.match(/\bultra\s*([579])\b/) ?? t.match(/\bnuc\w*?u([579])\b/);
+  return u ? `u${u[1]}` : null;
+}
+
+// Gelernt: Modell → { CPU → { Angebots-ID → zuletzt gesehen } }; zählt jedes Angebot nur einmal.
+let learned = {};
+function learnedFor(key, tier) {
+  const counts = Object.entries(learned[key] ?? {}).map(([id, items]) => [id, Object.keys(items).length])
+    .filter(([id]) => !tier || parseCpu(id)?.tier === tier).sort((a, b) => b[1] - a[1]);
+  const total = counts.reduce((sum, [, n]) => sum + n, 0);
+  if (total < 3) return null;
+  const gens = new Set(counts.map(([id]) => parseCpu(id)?.gen));
+  return { top: counts[0][1] >= 3 && counts[0][1] / total >= 0.8 ? counts[0][0] : null, n: counts[0][1], total, gen: gens.size === 1 ? [...gens][0] : null };
+}
+
+// CPU aus Titel (+ Artikelmerkmalen), sonst aus dem Modellnamen. source sagt, woher die Angabe stammt.
+// onlyGen: nur die Generation ist bekannt – reicht, um zu alte Geräte auszusortieren, nicht für die Bewertung.
+export function resolveCpu(text, family) {
+  const direct = parseCpu(text);
+  if (direct) return direct;
+  const model = parseModel(text, family);
+  if (!model) return null;
+  const tier = tierOf(text);
+  const fixed = model.cpus && (tier ? model.cpus[tier] : Object.keys(model.cpus).length === 1 ? Object.values(model.cpus)[0] : null);
+  if (fixed) return { ...parseCpu(fixed), source: `aus Modellcode ${model.key}`, model: model.key };
+  const l = learnedFor(model.key, tier);
+  if (l?.top) return { ...parseCpu(l.top), source: `vermutet: ${l.n} von ${l.total} Angeboten ${model.key} mit dieser CPU`, guessed: true, model: model.key };
+  const gen = model.gen ?? l?.gen ?? null;
+  if (gen == null) return null;
+  if (tier?.startsWith("i") && model.vendor === "intel") {
+    return { id: `${tier} (${gen}. Gen)`, vendor: "intel", tier, gen, generic: true, source: `Generation aus Modell ${model.key}`, model: model.key };
+  }
+  return { id: null, vendor: model.vendor, gen, onlyGen: true, model: model.key };
+}
+
 // RAM und SSD aus Angaben wie "16GB/512GB", "32 GB DDR5", "1TB NVMe". Kleine Größen (≤ 96 GB) gelten
 // als RAM, große (≥ 120 GB oder TB) als SSD – außer der Kontext sagt eindeutig etwas anderes.
 const RAM_SIZES = new Set([4, 8, 12, 16, 24, 32, 40, 48, 64, 96]);
@@ -108,9 +170,13 @@ function rejectReason(i, family, extra = "") {
   if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen`;
   const term = excludedTerm(title);
   if (term) return `Ausschlusswort „${term}“`;
-  const cpu = parseCpu(`${title} ${extra}`);
+  const cpu = resolveCpu(`${title} ${extra}`, family);
   if (!cpu) return "CPU nicht im Titel";
-  if (tooOld(cpu)) return `CPU älter als 6 Jahre (${cpu.id})`;
+  if (tooOld(cpu)) {
+    if (cpu.onlyGen) modelOld[cpu.model] = (modelOld[cpu.model] ?? new Set()).add(i.itemId);
+    return `CPU älter als 6 Jahre (${cpu.id ?? cpu.model})`;
+  }
+  if (cpu.onlyGen) return "CPU nicht im Titel";
   if (!i.buyingOptions?.includes("AUCTION") && totalPrice(i) < config.minPrice) return `unter Mindestpreis ${config.minPrice} €`;
   return null;
 }
@@ -121,6 +187,7 @@ function aspectsText(item) {
   for (const a of item.localizedAspects ?? []) {
     const name = (a.name ?? "").toLowerCase(), value = String(a.value ?? "");
     if (/prozessor|cpu/.test(name)) parts.push(value);
+    else if (/^(modell|produktlinie|serie)$/.test(name)) parts.push(value);
     else if (/arbeitsspeicher|\bram\b/.test(name)) parts.push(`${value} RAM`);
     else if (/ssd|festplatte|speicherkapazität/.test(name)) parts.push(`${value} SSD`);
   }
@@ -175,8 +242,11 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   const rejected = new Map();
   const cache = await readFile(cacheFile, "utf8").then(JSON.parse).catch(() => ({}));
   const pending = []; // CPU nicht im Titel, Merkmale noch nicht bekannt
+  const hist = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({}));
+  hist.auctions ??= {}; hist.ended ??= []; hist.snapshots ??= []; hist.models ??= {};
+  learned = hist.models;
   const addOffer = (i, f, extra) => {
-    const cpu = parseCpu(`${i.title} ${extra}`);
+    const cpu = resolveCpu(`${i.title} ${extra}`, f);
     const specs = parseSpecs(`${i.title} ${extra}`);
     offers.push({ item: i, family: f.label, cpu, specs, ddr: ddrFor(cpu, specs), total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
   };
@@ -188,6 +258,12 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
       ]);
       let kept = 0;
       const reasons = {};
+      // Erst lernen: Angebote, die Modell und CPU nennen
+      for (const i of [...fixed, ...auctions]) {
+        const text = `${i.title ?? ""} ${cache[i.itemId]?.text ?? ""}`;
+        const cpu = parseCpu(text), model = cpu && !cpu.generic && parseModel(text, f);
+        if (model) ((learned[model.key] ??= {})[cpu.id] ??= {})[i.itemId] = now;
+      }
       for (const i of [...fixed, ...auctions]) {
         if (offers.some((o) => o.item.itemId === i.itemId) || pending.some((p) => p.i.itemId === i.itemId)) continue;
         const extra = cache[i.itemId]?.text ?? "";
@@ -213,7 +289,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     }
   }
 
-  // Artikelmerkmale nachladen: zuerst Angebote ohne CPU im Titel, dann solche mit unbekanntem RAM/SSD.
+  // Artikelmerkmale nachladen: zuerst Angebote ohne CPU im Titel, dann solche mit unbekanntem RAM/SSD
+  // oder nur vermuteter CPU.
   // Jedes Angebot wird nur einmal abgefragt (Zwischenspeicher im Branch data).
   let lookups = 0, recovered = 0, completed = 0;
   const lookup = async (i) => {
@@ -232,11 +309,16 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   }
   for (const o of offers) {
     if (lookups >= MAX_LOOKUPS) break;
-    if ((o.specs.ram != null && o.specs.ssd != null) || cache[o.item.itemId]) continue;
+    if ((o.specs.ram != null && o.specs.ssd != null && !o.cpu.guessed) || cache[o.item.itemId]) continue;
     const text = await lookup(o.item);
+    // Vermutete CPU durch die Angabe des Verkäufers ersetzen, falls vorhanden
+    const exact = o.cpu.guessed && parseCpu(`${o.item.title} ${text}`);
+    if (exact) { o.cpu = exact; o.ddr = ddrFor(exact, o.specs); }
     const specs = parseSpecs(`${o.item.title} ${text}`);
     if (specs.ram != null || specs.ssd != null) { o.specs = { ...specs, ram: o.specs.ram ?? specs.ram, ssd: o.specs.ssd ?? specs.ssd }; completed++; }
   }
+  // Vermutung war falsch und die CPU ist zu alt → raus
+  for (let k = offers.length - 1; k >= 0; k--) if (tooOld(offers[k].cpu)) offers.splice(k, 1);
   console.log(`Artikelmerkmale: ${lookups} abgefragt, ${recovered} Mini-PCs dadurch ergänzt, ${completed} mit RAM/SSD vervollständigt, `
     + `${pending.length - Math.min(pending.length, MAX_LOOKUPS)} warten auf spätere Läufe`);
   for (const [id, c] of Object.entries(cache)) if (c.at < now - 30 * 864e5) delete cache[id];
@@ -247,7 +329,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
 
   // Barebone-Wert je CPU: Median von (Preis − Bauteilwert) über Sofortkäufe mit bekannter Ausstattung;
   // bei zu wenigen Angeboten über die CPU-Klasse (z. B. alle i7 der 12. Generation).
-  const complete = offers.filter((o) => !o.auction && o.specs.ram != null && o.specs.ssd != null);
+  // Nur vermutete CPUs (aus gelernten Modellen) zählen nicht mit, damit Fehlzuordnungen den Wert nicht verfälschen.
+  const complete = offers.filter((o) => !o.auction && !o.cpu.guessed && o.specs.ram != null && o.specs.ssd != null);
   const residuals = (key) => complete.filter((o) => key(o)).map((o) => o.total - partsValue(o));
   const baseCache = new Map();
   const baseFor = (cpu) => {
@@ -279,7 +362,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     const i = o.item;
     result.deals.push({
       id: i.itemId, title: i.title, url: i.itemWebUrl, image: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
-      family: o.family, cpu: o.cpu.id, ram: o.specs.ram, ssd: o.specs.ssd, ddr: o.ddr, barebone: o.specs.barebone, noPsu: o.specs.noPsu,
+      family: o.family, cpu: o.cpu.id, cpuSource: o.cpu.source ?? null, cpuGuessed: o.cpu.guessed ?? false,
+      ram: o.specs.ram, ssd: o.specs.ssd, ddr: o.ddr, barebone: o.specs.barebone, noPsu: o.specs.noPsu,
       condition: i.condition ?? null, auction: o.auction, bids: o.auction ? i.bidCount ?? 0 : null, endsAt: i.itemEndDate ?? null,
       bestOffer: i.buyingOptions?.includes("BEST_OFFER") ?? false,
       seller: i.seller ? { score: i.seller.feedbackScore ?? null, positive: i.seller.feedbackPercentage ?? null } : null,
@@ -308,8 +392,6 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     return { cpu, ram, ssd, count: g.length, cheapest: round2(sorted[0].total), cheapestUrl: sorted[0].item.itemWebUrl, median: round(median(g.map((o) => o.total))) };
   }).sort((a, c) => c.count - a.count).slice(0, 40);
   // ---- Preisstatistik ----
-  const hist = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({}));
-  hist.auctions ??= {}; hist.ended ??= []; hist.snapshots ??= [];
   // Laufende Auktionen merken, samt geschätztem Wert – nach dem Ende zeigt der Vergleich, wie gut die Schätzung ist.
   const seen = new Set();
   for (const o of offers.filter((x) => x.auction)) {
@@ -350,6 +432,13 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   for (const c of result.cpus) if (c.offers) snap[c.cpu] = [c.cheapest, c.base, c.offers];
   hist.snapshots.push({ t: now, c: snap });
   hist.snapshots = hist.snapshots.filter((x) => x.t > now - WINDOW);
+  for (const [key, cpus] of Object.entries(learned)) {
+    for (const [id, items] of Object.entries(cpus)) {
+      for (const [itemId, at] of Object.entries(items)) if (at < now - 2 * WINDOW) delete items[itemId];
+      if (!Object.keys(items).length) delete cpus[id];
+    }
+    if (!Object.keys(cpus).length) delete learned[key];
+  }
   await writeFile(historyFile, JSON.stringify(hist));
   console.log(`Statistik: ${Object.keys(hist.auctions).length} Auktionen beobachtet, ${settled} beendet geprüft (${sold} verkauft), `
     + `${hist.ended.length} beendete in 30 Tagen, ${hist.snapshots.length} Stände.`);
@@ -360,6 +449,17 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
 
   result.rejected = [...rejected.values()].sort((a, c) => a.price - c.price).slice(0, 15);
   result.offerCount = offers.length;
+  // Modellnamen → CPU: Tabelle plus Gelerntes, zur Kontrolle auf der Seite
+  const viaModel = {};
+  for (const o of offers) if (o.cpu.model) viaModel[o.cpu.model] = (viaModel[o.cpu.model] ?? 0) + 1;
+  result.models = [...new Set([...Object.keys(learned), ...Object.keys(viaModel), ...Object.keys(modelOld)])].map((key) => {
+    const cpus = Object.entries(learned[key] ?? {}).map(([id, items]) => [id, Object.keys(items).length]).sort((a, c) => c[1] - a[1]);
+    return { model: key, gen: modelGens[key] ?? null, cpus: cpus.slice(0, 5), observed: cpus.reduce((sum, [, n]) => sum + n, 0),
+      viaModel: viaModel[key] ?? 0, tooOld: modelOld[key]?.size ?? 0 };
+  }).sort((a, c) => (c.observed + c.viaModel + c.tooOld) - (a.observed + a.viaModel + a.tooOld)).slice(0, 60);
+  const sum = (o) => Object.values(o).reduce((a, b) => a + (b.size ?? b), 0);
+  console.log(`Modellnamen: ${Object.keys(learned).length} Modelle gelernt, ${sum(viaModel)} Mini-PCs über den Modellnamen erkannt, `
+    + `${sum(modelOld)} über den Modellnamen als zu alt aussortiert.`);
   console.log(`${offers.length} Mini-PCs ausgewertet, ${result.deals.length} Schnäppchen, ${result.cpus.length} CPUs.`);
 }
 
