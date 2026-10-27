@@ -8,10 +8,13 @@
 // Angeboten mit dieser CPU ab (Preis minus Bauteilwert, davon der Median).
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { API, getToken, num, totalPrice, domestic, quantile, median } from "./lib.mjs";
+import { API, getToken, getItem, num, totalPrice, domestic, quantile, median } from "./lib.mjs";
 
 const config = JSON.parse(await readFile(new URL("../minipcs.json", import.meta.url), "utf8"));
 const outFile = new URL("../data/minipc.json", import.meta.url);
+// Artikelmerkmale (Prozessor, RAM, SSD) für Angebote ohne CPU im Titel, je Angebot nur einmal abgefragt
+const cacheFile = process.env.MINIPC_CACHE ?? "data/minipc-cache.json";
+const MAX_LOOKUPS = 80;
 const now = Date.now();
 const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 const round2 = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
@@ -43,6 +46,12 @@ export function parseCpu(title) {
   }
   m = t.match(/ryzen\s*([3579])\s*(?:pro\s*)?(\d{4})([a-z]{0,2})\b/);
   if (m) return { id: `ryzen ${m[1]} ${m[2]}${m[3]}`, vendor: "amd", tier: `r${m[1]}`, gen: Math.floor(Number(m[2]) / 1000) * 1000 };
+  // Nur Klasse und Generation, z. B. "i5 11. Gen", "i7 12th Gen", "11. Generation Core i5"
+  const generic = (tier, gen) => ({ id: `i${tier} (${gen}. Gen)`, vendor: "intel", tier: `i${tier}`, gen: Number(gen), generic: true });
+  m = t.match(/\bi([3579])\b[^0-9]{0,15}?\b(1[0-4]|[6-9])\s*(?:\.|th|te|nd|rd)?\s*gen/);
+  if (m) return generic(m[1], m[2]);
+  m = t.match(/\b(1[0-4]|[6-9])\s*(?:\.|th|te|nd|rd)\s*gen\w*[^0-9]{0,15}?\bi([3579])\b/);
+  if (m) return generic(m[2], m[1]);
   return null;
 }
 
@@ -87,7 +96,7 @@ function trusted(i) {
   return true;
 }
 
-function rejectReason(i, family) {
+function rejectReason(i, family, extra = "") {
   const title = i.title ?? "";
   if (!new RegExp(family.require, "i").test(title)) return "keine passende Baureihe im Titel";
   if (i.conditionId === "7000") return "Zustand: defekt";
@@ -95,11 +104,23 @@ function rejectReason(i, family) {
   if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen`;
   const term = excludedTerm(title);
   if (term) return `Ausschlusswort „${term}“`;
-  const cpu = parseCpu(title);
+  const cpu = parseCpu(`${title} ${extra}`);
   if (!cpu) return "CPU nicht im Titel";
   if (tooOld(cpu)) return `CPU älter als 6 Jahre (${cpu.id})`;
   if (!i.buyingOptions?.includes("AUCTION") && totalPrice(i) < config.minPrice) return `unter Mindestpreis ${config.minPrice} €`;
   return null;
+}
+
+// Artikelmerkmale als Text, den parseCpu/parseSpecs verstehen: "Intel Core i5-1135G7 16 GB RAM 512 GB SSD"
+function aspectsText(item) {
+  const parts = [];
+  for (const a of item.localizedAspects ?? []) {
+    const name = (a.name ?? "").toLowerCase(), value = String(a.value ?? "");
+    if (/prozessor|cpu/.test(name)) parts.push(value);
+    else if (/arbeitsspeicher|\bram\b/.test(name)) parts.push(`${value} RAM`);
+    else if (/ssd|festplatte|speicherkapazität/.test(name)) parts.push(`${value} SSD`);
+  }
+  return parts.join(" ");
 }
 
 // ---- Bauteilpreise je GB ----
@@ -148,6 +169,13 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   // Angebote aller Baureihen sammeln und auswerten
   const offers = [];
   const rejected = new Map();
+  const cache = await readFile(cacheFile, "utf8").then(JSON.parse).catch(() => ({}));
+  const pending = []; // CPU nicht im Titel, Merkmale noch nicht bekannt
+  const addOffer = (i, f, extra) => {
+    const cpu = parseCpu(`${i.title} ${extra}`);
+    const specs = parseSpecs(`${i.title} ${extra}`);
+    offers.push({ item: i, family: f.label, cpu, specs, ddr: ddrFor(cpu, specs), total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
+  };
   for (const f of config.families) {
     try {
       const [fixed, auctions] = await Promise.all([
@@ -157,8 +185,12 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
       let kept = 0;
       const reasons = {};
       for (const i of [...fixed, ...auctions]) {
-        if (offers.some((o) => o.item.itemId === i.itemId)) continue;
-        const reason = rejectReason(i, f);
+        if (offers.some((o) => o.item.itemId === i.itemId) || pending.some((p) => p.i.itemId === i.itemId)) continue;
+        const extra = cache[i.itemId]?.text ?? "";
+        const reason = rejectReason(i, f, extra);
+        // Nachschlagen lohnt nur bei echten Geräten (nicht bei Netzteilen o. Ä. unter dem Mindestpreis)
+        if (reason === "CPU nicht im Titel" && !cache[i.itemId]
+          && (i.buyingOptions?.includes("AUCTION") || totalPrice(i) >= config.minPrice)) { pending.push({ i, f }); continue; }
         if (reason) {
           const kind = reason.replace(/ \(.*\)$|„.*“|\d+/g, "").trim();
           reasons[kind] = (reasons[kind] ?? 0) + 1;
@@ -167,17 +199,43 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
           }
           continue;
         }
-        const cpu = parseCpu(i.title);
-        const specs = parseSpecs(i.title);
-        offers.push({ item: i, family: f.label, cpu, specs, ddr: ddrFor(cpu, specs), total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
+        addOffer(i, f, extra);
         kept++;
       }
-      console.log(`  ${f.label}: ${fixed.length + auctions.length} gefunden, ${kept} ausgewertet – verworfen: `
+      console.log(`  ${f.label}: ${fixed.length + auctions.length} gefunden, ${kept} ausgewertet, ${pending.filter((p) => p.f === f).length} ohne CPU im Titel – verworfen: `
         + Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", "));
     } catch (e) {
       result.errors.push(e.message);
     }
   }
+
+  // Artikelmerkmale nachladen: zuerst Angebote ohne CPU im Titel, dann solche mit unbekanntem RAM/SSD.
+  // Jedes Angebot wird nur einmal abgefragt (Zwischenspeicher im Branch data).
+  let lookups = 0, recovered = 0, completed = 0;
+  const lookup = async (i) => {
+    lookups++;
+    const r = await getItem(token, i.itemId).catch(() => null);
+    const text = r?.item ? aspectsText(r.item) : "";
+    cache[i.itemId] = { at: now, text };
+    return text;
+  };
+  pending.sort((a, c) => totalPrice(a.i) - totalPrice(c.i));
+  for (const { i, f } of pending) {
+    if (lookups >= MAX_LOOKUPS) break;
+    const text = await lookup(i);
+    if (!rejectReason(i, f, text)) { addOffer(i, f, text); recovered++; }
+  }
+  for (const o of offers) {
+    if (lookups >= MAX_LOOKUPS) break;
+    if ((o.specs.ram != null && o.specs.ssd != null) || cache[o.item.itemId]) continue;
+    const text = await lookup(o.item);
+    const specs = parseSpecs(`${o.item.title} ${text}`);
+    if (specs.ram != null || specs.ssd != null) { o.specs = { ...specs, ram: o.specs.ram ?? specs.ram, ssd: o.specs.ssd ?? specs.ssd }; completed++; }
+  }
+  console.log(`Artikelmerkmale: ${lookups} abgefragt, ${recovered} Mini-PCs dadurch ergänzt, ${completed} mit RAM/SSD vervollständigt, `
+    + `${pending.length - Math.min(pending.length, MAX_LOOKUPS)} warten auf spätere Läufe`);
+  for (const [id, c] of Object.entries(cache)) if (c.at < now - 30 * 864e5) delete cache[id];
+  await writeFile(cacheFile, JSON.stringify(cache));
 
   // Bauteilwert eines Angebots (RAM/SSD unbekannt = 0, dann zählt es zum Barebone-Anteil)
   const partsValue = (o) => (o.specs.ram ?? 0) * (rates[o.ddr].perGB ?? 0) + (o.specs.ssd ?? 0) * (rates.ssd.perGB ?? 0);

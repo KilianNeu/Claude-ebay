@@ -9,3 +9,4 @@ state/
 notify/
 history/
 data/minipc.json
+data/minipc-cache.json
