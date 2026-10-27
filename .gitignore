@@ -15,3 +15,4 @@ data/minipc-stats.json
 data/ram.json
 data/ram-stats.json
 data/ram-history.json
+data/usage.json

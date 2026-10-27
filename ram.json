@@ -13,6 +13,11 @@
     "shipping": 5,
     "packaging": 1
   },
+  "notify": {
+    "minProfit": 15,
+    "minProfitPercent": 10,
+    "maxAgeMinutes": 90
+  },
   "exclude": [
     "defekt",
     "defekte",

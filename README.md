@@ -127,3 +127,12 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
   Viertel der Sofort-Kaufen-Angebote; Schnäppchen ab 15 % darunter (mind. 3 Vergleichsangebote)
 - Gewinn: günstigster anderer Sofortkauf − Versand/Verpackung (`resale`, 5 + 1 €) − Kaufpreis
 - Beendete Auktionen werden per getItem mit echtem Endpreis erfasst (max. 40 je Lauf)
+- Schnellcheck: neue RAM-Sofortkäufe (eine Oder-Suche „(ddr4,ddr5)“ je Lauf) werden wie Grafikkarten per
+  ntfy gemeldet, wenn der Gewinn gegenüber dem günstigsten anderen Sofortkauf des Markts mindestens
+  `notify.minProfit` (15 €) und `notify.minProfitPercent` (10 %) erreicht; Verkaufspreise aus
+  `ram-markets.json` im Branch `data`
+
+## eBay-API-Verbrauch
+
+`scripts/usage.mjs` fragt stündlich den Tagesverbrauch der Browse API über die Developer Analytics API
+ab (alle Läufe zusammen, inkl. Schnellcheck) und zeigt ihn in der Fußzeile der Seite.

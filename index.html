@@ -419,6 +419,7 @@
     Daten über die eBay Browse API, aktualisiert per GitHub Action. Referenz ist der geschätzte Verkaufspreis
     (ab 5 beobachteten Verkäufen) oder sonst der Median der Sofort-Kaufen-Angebote – eine Schätzung, kein Wertgutachten. Vor dem Kauf immer Fotos, Beschreibung
     und Verkäuferbewertung prüfen. Keine Verbindung zu eBay Inc.
+    <span id="usage" style="display:block;margin-top:6px"></span>
   </footer>
 </div>
 
@@ -1202,6 +1203,16 @@ async function rsLoad() {
   let w = 0;
   addEventListener("resize", () => { const svg = document.getElementById("rsChart"); if (svg.clientWidth && svg.clientWidth !== w) { w = svg.clientWidth; rsRender(); } });
 }
+
+// eBay-API-Verbrauch (stündlich abgefragt, zählt alle Läufe inkl. Schnellcheck)
+fetch("data/usage.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((u) => {
+  const r = u?.rates?.find((x) => x.window === 86400) ?? u?.rates?.[0];
+  if (!r) return;
+  const reset = r.reset ? new Date(r.reset).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" }) : null;
+  document.getElementById("usage").textContent = `eBay-API heute: ${r.count.toLocaleString("de-DE")} von ${r.limit.toLocaleString("de-DE")} Abfragen`
+    + ` (${Math.round(r.count / r.limit * 100)} %)` + (reset ? `, zurückgesetzt um ${reset} Uhr` : "")
+    + ` · Stand ${new Date(u.updatedAt).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr`;
+}).catch(() => {});
 
 function showTab(name) {
   if (!document.getElementById(`tab-${name}`)) name = "angebote";

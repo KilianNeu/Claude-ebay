@@ -4,15 +4,18 @@
 // Lauf. Als Verkaufspreis dient der günstigste Sofortkauf aus dem letzten stündlichen Lauf.
 //
 // Umgebung: EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, NTFY_TOPIC (ohne: nur Ausgabe im Log),
-// MARKETS_FILE (markets.json aus dem Branch data), NOTIFIED_FILE (bereits gemeldete Angebote).
+// MARKETS_FILE (markets.json aus dem Branch data), RAM_MARKETS_FILE (ram-markets.json aus dem Branch data),
+// NOTIFIED_FILE (bereits gemeldete Angebote).
 
 import { readFile, writeFile } from "node:fs/promises";
 import { config, getToken, search, totalPrice, rejectReason } from "./lib.mjs";
+import { ramConfig, parseRam, marketKey, rejectReason as ramRejectReason } from "./ram-lib.mjs";
 
 const now = Date.now();
 const HOUR = 3.6e6, DAY = 24 * HOUR;
 const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, NTFY_TOPIC, NTFY_URL = "https://ntfy.sh" } = process.env;
 const marketsFile = process.env.MARKETS_FILE ?? "data/markets.json";
+const ramMarketsFile = process.env.RAM_MARKETS_FILE ?? "data/ram-markets.json";
 const notifiedFile = process.env.NOTIFIED_FILE ?? "data/notified.json";
 const notify = config.notify ?? {};
 
@@ -29,69 +32,95 @@ if (process.env.QUICK_TEST === "true") {
 }
 
 const markets = (await readFile(marketsFile, "utf8").then(JSON.parse).catch(() => null))?.markets;
-if (!markets) {
+const ramMarkets = (await readFile(ramMarketsFile, "utf8").then(JSON.parse).catch(() => null))?.markets;
+if (!markets && !ramMarkets) {
   console.log("Noch keine Marktwerte aus dem stündlichen Lauf – Schnellcheck übersprungen.");
   process.exit(0);
 }
 if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) throw new Error("EBAY_CLIENT_ID / EBAY_CLIENT_SECRET fehlen.");
 const notified = await readFile(notifiedFile, "utf8").then(JSON.parse).catch(() => ({}));
 
-// Modellnummern bündeln, je Suche höchstens 6 Begriffe.
-const numbers = [...new Set(config.searches.flatMap((s) => s.query.match(/\d{4}/g) ?? []))];
-const chunks = [];
-for (let i = 0; i < numbers.length; i += 6) chunks.push(numbers.slice(i, i + 6));
-
-const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
-  + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "")
-  + ",buyingOptions:{FIXED_PRICE}";
 const token = await getToken(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET);
-const items = new Map();
-for (const chunk of chunks) {
-  const found = await search(token, { q: `(${chunk.join(",")})`, filter: where, sort: "newlyListed", limit: "200" });
-  for (const i of found) items.set(i.itemId, i);
-}
-
-// Zur Kontrolle: Alter der neuesten Angebote (zeigt, ob die Sortierung nach Einstelldatum greift).
-const ages = [...items.values()].map((i) => i.itemCreationDate ? Math.round((now - Date.parse(i.itemCreationDate)) / 60e3) : null);
-console.log(`Alter der ersten Treffer (Minuten): ${ages.slice(0, 5).join(", ")} … neuestes: ${Math.min(...ages.filter((x) => x != null))}`);
-
-const r = config.resale ?? { shipping: 0, packaging: 0, feeRate: 0 };
-const maxAge = (notify.maxAgeMinutes ?? 90) * 60e3;
 const hits = [];
-let fresh = 0;
-for (const i of items.values()) {
-  if (i.buyingOptions?.includes("AUCTION")) continue; // Auktion mit Sofort-Kaufen: Preis wäre das Gebot
-  const created = i.itemCreationDate ? Date.parse(i.itemCreationDate) : now;
-  if (now - created > maxAge || notified[i.itemId]) continue;
-  fresh++;
-  // Erstes Modell, für das das Angebot alle Filter besteht (z. B. 4070 schließt "Ti" aus, 4070 Ti nicht).
-  const s = config.searches.find((x) => !rejectReason(i, x));
-  const m = s && markets[s.label];
-  if (!m) continue;
-  const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin.price : m.nextBin?.price;
-  if (!resale) continue;
-  const total = totalPrice(i);
-  const fee = notify.business ? resale * r.feeRate : 0;
-  const profit = resale - fee - r.shipping - r.packaging - total;
-  // Mindestgewinn absolut und relativ zum Kaufpreis: 100 € bei einer 5.900-€-Karte sind kein Schnäppchen.
-  const required = Math.max(notify.minProfit ?? 30, total * (notify.minProfitPercent ?? 10) / 100);
-  if (profit >= required) hits.push({ i, s, total, resale, profit, required });
+const fresh = (i, maxAgeMinutes) => !notified[i.itemId] && now - (i.itemCreationDate ? Date.parse(i.itemCreationDate) : now) <= maxAgeMinutes * 60e3;
+
+// ---- Grafikkarten ----
+if (markets) {
+  // Modellnummern bündeln, je Suche höchstens 6 Begriffe.
+  const numbers = [...new Set(config.searches.flatMap((s) => s.query.match(/\d{4}/g) ?? []))];
+  const chunks = [];
+  for (let i = 0; i < numbers.length; i += 6) chunks.push(numbers.slice(i, i + 6));
+
+  const where = `priceCurrency:${config.currency},itemLocationCountry:DE`
+    + (config.conditionIds ? `,conditionIds:{${config.conditionIds}}` : "")
+    + ",buyingOptions:{FIXED_PRICE}";
+  const items = new Map();
+  for (const chunk of chunks) {
+    const found = await search(token, { q: `(${chunk.join(",")})`, filter: where, sort: "newlyListed", limit: "200" });
+    for (const i of found) items.set(i.itemId, i);
+  }
+
+  // Zur Kontrolle: Alter der neuesten Angebote (zeigt, ob die Sortierung nach Einstelldatum greift).
+  const ages = [...items.values()].map((i) => i.itemCreationDate ? Math.round((now - Date.parse(i.itemCreationDate)) / 60e3) : null);
+  console.log(`Alter der ersten Treffer (Minuten): ${ages.slice(0, 5).join(", ")} … neuestes: ${Math.min(...ages.filter((x) => x != null))}`);
+
+  const r = config.resale ?? { shipping: 0, packaging: 0, feeRate: 0 };
+  let freshCount = 0;
+  for (const i of items.values()) {
+    if (i.buyingOptions?.includes("AUCTION")) continue; // Auktion mit Sofort-Kaufen: Preis wäre das Gebot
+    if (!fresh(i, notify.maxAgeMinutes ?? 90)) continue;
+    freshCount++;
+    // Erstes Modell, für das das Angebot alle Filter besteht (z. B. 4070 schließt "Ti" aus, 4070 Ti nicht).
+    const s = config.searches.find((x) => !rejectReason(i, x));
+    const m = s && markets[s.label];
+    if (!m) continue;
+    const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin.price : m.nextBin?.price;
+    if (!resale) continue;
+    const total = totalPrice(i);
+    const fee = notify.business ? resale * r.feeRate : 0;
+    const profit = resale - fee - r.shipping - r.packaging - total;
+    // Mindestgewinn absolut und relativ zum Kaufpreis: 100 € bei einer 5.900-€-Karte sind kein Schnäppchen.
+    const required = Math.max(notify.minProfit ?? 30, total * (notify.minProfitPercent ?? 10) / 100);
+    if (profit >= required) hits.push({ i, label: s.label, total, resale, profit, required });
+  }
+  console.log(`Grafikkarten: ${items.size} Angebote geprüft, ${freshCount} neu, ${hits.length} lohnend.`);
 }
-console.log(`${items.size} Angebote geprüft, ${fresh} neu, ${hits.length} lohnend.`);
+
+
+// ---- Arbeitsspeicher: eine Suche für DDR4 und DDR5 ----
+if (ramMarkets) {
+  const rn = ramConfig.notify ?? {}, rr = ramConfig.resale;
+  const ramWhere = `priceCurrency:${ramConfig.currency},itemLocationCountry:DE,conditionIds:{${ramConfig.conditionIds}},buyingOptions:{FIXED_PRICE}`;
+  const found = await search(token, { q: "(ddr4,ddr5)", category_ids: ramConfig.categoryIds, filter: ramWhere, sort: "newlyListed", limit: "200" });
+  let freshRam = 0, ramHits = 0;
+  for (const i of found) {
+    if (i.buyingOptions?.includes("AUCTION") || !fresh(i, rn.maxAgeMinutes ?? 90) || ramRejectReason(i)) continue;
+    freshRam++;
+    const key = marketKey(parseRam(i.title)), m = ramMarkets[key];
+    if (!m || m.offers < 3) continue; // zu wenig Vergleich
+    const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin.price : m.nextBin?.price;
+    if (!resale) continue;
+    const total = totalPrice(i);
+    const profit = resale - rr.shipping - rr.packaging - total;
+    const required = Math.max(rn.minProfit ?? 15, total * (rn.minProfitPercent ?? 10) / 100);
+    if (profit >= required) { hits.push({ i, label: key, total, resale, profit, required }); ramHits++; }
+  }
+  console.log(`Arbeitsspeicher: ${found.length} Angebote geprüft, ${freshRam} neu, ${ramHits} lohnend.`);
+}
 
 const euro = (v) => `${Math.round(v)} €`;
-for (const { i, s, total, resale, profit, required } of hits.sort((a, b) => b.profit - a.profit)) {
+for (const { i, label, total, resale, profit, required } of hits.sort((a, b) => b.profit - a.profit)) {
   const message = `${i.title}\n${euro(total)} inkl. Versand · günstigster Sofortkauf sonst ${euro(resale)}`
     + ` · Gewinn ${Math.round(profit / total * 100)} %`
     + `\nVerkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen`;
-  console.log(`  ${s.label}: ${euro(total)}, Gewinn ≈ ${euro(profit)} – ${i.title}`);
+  console.log(`  ${label}: ${euro(total)}, Gewinn ≈ ${euro(profit)} – ${i.title}`);
   if (NTFY_TOPIC) {
     const res = await fetch(NTFY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         topic: NTFY_TOPIC,
-        title: `${s.label} für ${euro(total)} · Gewinn ≈ ${euro(profit)}`,
+        title: `${label} für ${euro(total)} · Gewinn ≈ ${euro(profit)}`,
         message,
         click: i.itemWebUrl,
         tags: ["moneybag"],

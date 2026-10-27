@@ -54,6 +54,12 @@ jobs:
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           RAM_HISTORY: history/ram-history.json
         run: node scripts/ram.mjs
+      - name: eBay-API-Verbrauch abfragen
+        continue-on-error: true
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+        run: node scripts/usage.mjs
       - name: Preishistorie speichern
         working-directory: history
         run: |
@@ -61,7 +67,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add history.json markets.json
-          for f in minipc-cache.json minipc-history.json ram-history.json; do [ -f $f ] && git add $f; done
+          for f in minipc-cache.json minipc-history.json ram-history.json ram-markets.json; do [ -f $f ] && git add $f; done
           git diff --cached --quiet && exit 0
           # Nur den aktuellen Stand behalten (ein Commit), damit das Repo nicht mit jedem Lauf wächst
           git checkout -q --orphan snapshot
@@ -74,6 +80,7 @@ jobs:
           cp data/deals.json data/stats.json _site/data/
           cp data/minipc.json data/minipc-stats.json _site/data/ 2>/dev/null || true
           cp data/ram.json data/ram-stats.json _site/data/ 2>/dev/null || true
+          cp data/usage.json _site/data/ 2>/dev/null || true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
