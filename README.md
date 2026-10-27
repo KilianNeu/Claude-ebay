@@ -136,3 +136,7 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
 
 `scripts/usage.mjs` fragt stündlich den Tagesverbrauch der Browse API über die Developer Analytics API
 ab (alle Läufe zusammen, inkl. Schnellcheck) und zeigt ihn in der Fußzeile der Seite.
+Der stündliche Lauf legt den Stand zusätzlich als `usage.json` in den Branch `data`. Der Schnellcheck
+setzt aus, wenn die verbleibenden Abfragen bis zum Zurücksetzen nicht mehr für die stündlichen Läufe
+reichen (150 je Stunde reserviert) – an normalen Tagen greift das nie (≈ 4.400 von 5.000 Abfragen).
+Mehr Abfragen gibt es kostenlos über eBays „Application Growth Check“ im Developer-Portal.

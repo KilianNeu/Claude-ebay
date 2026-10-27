@@ -19,4 +19,7 @@ for (const api of (await res.json()).rateLimits ?? []) {
 }
 for (const r of rates) console.log(`${r.resource}: ${r.count} von ${r.limit} verbraucht, ${r.remaining} übrig, zurückgesetzt ${r.reset} (Fenster ${r.window} s)`);
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
-await writeFile(new URL("../data/usage.json", import.meta.url), JSON.stringify({ updatedAt: new Date().toISOString(), rates }));
+const out = JSON.stringify({ updatedAt: new Date().toISOString(), rates });
+await writeFile(new URL("../data/usage.json", import.meta.url), out);
+// Zusätzlich in den Branch data (USAGE_FILE), damit der Schnellcheck sein Budget kennt
+if (process.env.USAGE_FILE) await writeFile(process.env.USAGE_FILE, out);

@@ -30,7 +30,7 @@ jobs:
       - name: Marktwerte und gemeldete Angebote laden
         run: |
           mkdir -p state
-          if git fetch --depth=1 origin data; then git show FETCH_HEAD:markets.json > state/markets.json || true; git show FETCH_HEAD:ram-markets.json > state/ram-markets.json || true; fi
+          if git fetch --depth=1 origin data; then git show FETCH_HEAD:markets.json > state/markets.json || true; git show FETCH_HEAD:ram-markets.json > state/ram-markets.json || true; git show FETCH_HEAD:usage.json > state/usage.json || true; fi
           if git fetch --depth=1 origin notify; then
             git worktree add --detach notify FETCH_HEAD
           else
@@ -44,6 +44,7 @@ jobs:
           QUICK_TEST: ${{ inputs.test }}
           MARKETS_FILE: state/markets.json
           RAM_MARKETS_FILE: state/ram-markets.json
+          USAGE_FILE: state/usage.json
           NOTIFIED_FILE: notify/notified.json
         run: node scripts/quick-check.mjs
       - name: Gemeldete Angebote speichern

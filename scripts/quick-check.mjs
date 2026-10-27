@@ -5,7 +5,7 @@
 //
 // Umgebung: EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, NTFY_TOPIC (ohne: nur Ausgabe im Log),
 // MARKETS_FILE (markets.json aus dem Branch data), RAM_MARKETS_FILE (ram-markets.json aus dem Branch data),
-// NOTIFIED_FILE (bereits gemeldete Angebote).
+// NOTIFIED_FILE (bereits gemeldete Angebote), USAGE_FILE (API-Verbrauch aus dem stündlichen Lauf).
 
 import { readFile, writeFile } from "node:fs/promises";
 import { config, getToken, search, totalPrice, rejectReason } from "./lib.mjs";
@@ -17,6 +17,7 @@ const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, NTFY_TOPIC, NTFY_URL = "https://ntfy
 const marketsFile = process.env.MARKETS_FILE ?? "data/markets.json";
 const ramMarketsFile = process.env.RAM_MARKETS_FILE ?? "data/ram-markets.json";
 const notifiedFile = process.env.NOTIFIED_FILE ?? "data/notified.json";
+const usageFile = process.env.USAGE_FILE ?? "data/usage.json";
 const notify = config.notify ?? {};
 
 if (process.env.QUICK_TEST === "true") {
@@ -36,6 +37,24 @@ const ramMarkets = (await readFile(ramMarketsFile, "utf8").then(JSON.parse).catc
 if (!markets && !ramMarkets) {
   console.log("Noch keine Marktwerte aus dem stündlichen Lauf – Schnellcheck übersprungen.");
   process.exit(0);
+}
+// Budget: eBay erlaubt 5.000 Abfragen am Tag. Der stündliche Lauf hat Vorrang – reicht der Rest bis zum
+// Zurücksetzen nicht mehr für ihn, setzt der Schnellcheck aus. Stand aus dem letzten stündlichen Lauf,
+// seitdem verbrauchte Schnellcheck-Abfragen werden geschätzt.
+const HOURLY_RUN_CALLS = 150, QUICK_CALLS = 4, QUICK_PER_HOUR = 12;
+const usage = (await readFile(usageFile, "utf8").then(JSON.parse).catch(() => null));
+const rate = usage?.rates?.find((x) => x.resource === "buy.browse");
+if (rate?.reset && usage.updatedAt) {
+  const reset = Date.parse(rate.reset), since = Date.parse(usage.updatedAt);
+  if (reset > now && since > reset - DAY) { // Stand vom aktuellen Tageszeitraum
+    const left = rate.remaining - (now - since) / HOUR * QUICK_PER_HOUR * QUICK_CALLS;
+    const reserve = Math.ceil((reset - now) / HOUR) * HOURLY_RUN_CALLS;
+    if (left - QUICK_CALLS < reserve) {
+      console.log(`Budget knapp: noch etwa ${Math.round(left)} Abfragen, ${reserve} für die stündlichen Läufe bis zum Zurücksetzen reserviert – Schnellcheck setzt aus.`);
+      process.exit(0);
+    }
+    console.log(`Budget: noch etwa ${Math.round(left)} Abfragen bis ${new Date(reset).toISOString()}, Reserve ${reserve}.`);
+  }
 }
 if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) throw new Error("EBAY_CLIENT_ID / EBAY_CLIENT_SECRET fehlen.");
 const notified = await readFile(notifiedFile, "utf8").then(JSON.parse).catch(() => ({}));
