@@ -12,3 +12,6 @@ data/minipc.json
 data/minipc-cache.json
 data/minipc-history.json
 data/minipc-stats.json
+data/ram.json
+data/ram-stats.json
+data/ram-history.json

@@ -1,0 +1,53 @@
+{
+  "marketplace": "EBAY_DE",
+  "currency": "EUR",
+  "categoryIds": "170083",
+  "conditionIds": "1000|1500|2010|2020|2030|2500|3000",
+  "minSellerFeedback": 10,
+  "minSellerPositive": 97,
+  "minCapacity": 8,
+  "dealThreshold": 0.85,
+  "floorRatio": 0.4,
+  "minSold": 5,
+  "resale": {
+    "shipping": 5,
+    "packaging": 1
+  },
+  "exclude": [
+    "defekt",
+    "defekte",
+    "bastler",
+    "ersatzteil",
+    "ecc",
+    "registered",
+    "rdimm",
+    "lrdimm",
+    "reg",
+    "server",
+    "buffered",
+    "konvolut",
+    "lot",
+    "sammlung",
+    "paket",
+    "mainboard",
+    "motherboard",
+    "cpu",
+    "prozessor",
+    "aufrüstkit",
+    "bundle",
+    "gaming pc",
+    "komplett",
+    "kühler",
+    "heatsink",
+    "uk",
+    "import",
+    "zoll",
+    "china"
+  ],
+  "searches": [
+    { "ddr": "ddr4", "form": "sodimm", "query": "ddr4 sodimm" },
+    { "ddr": "ddr4", "form": "dimm", "query": "ddr4 ram" },
+    { "ddr": "ddr5", "form": "sodimm", "query": "ddr5 sodimm" },
+    { "ddr": "ddr5", "form": "dimm", "query": "ddr5 ram" }
+  ]
+}

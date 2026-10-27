@@ -112,3 +112,18 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
   Angeboten mit Modell und DDR-Angabe (ab 3 Angeboten, 80 % Anteil), zuletzt nach CPU-Generation (bis
   11. Gen/Ryzen 5000 sicher DDR4). Unsichere Fälle (12./13. Gen ohne Angabe) werden bei freiem Budget
   per Artikelmerkmale geprüft; die Karte zeigt, woher die DDR-Generation stammt
+
+## Arbeitsspeicher (eigene Kategorie)
+
+`scripts/ram.mjs` mit eigener Konfiguration `ram.json`, unabhängig von Grafikkarten und Mini-PCs
+(Ausgabe `data/ram.json` und `data/ram-stats.json`, Reiter „RAM“ und „RAM-Statistik“; Verlauf in
+`ram-history.json` im Branch `data`; im Workflow mit `continue-on-error`).
+
+- DDR4 und DDR5, SO-DIMM (Laptop) und DIMM (Desktop), ab `minCapacity` (8 GB); Server-RAM
+  (ECC/Registered) und Konvolute sind ausgeschlossen
+- Markt = DDR-Generation × Bauform × Gesamtkapazität, z. B. „DDR4 SO-DIMM 32 GB“ (Kits wie 2×16 GB
+  zählen als 32 GB); der Takt wird erkannt und angezeigt, bildet aber keinen eigenen Markt
+- Referenz: Median der beobachteten Auktions-Endpreise ab `minSold` (5) Verkäufen, sonst das günstigste
+  Viertel der Sofort-Kaufen-Angebote; Schnäppchen ab 15 % darunter (mind. 3 Vergleichsangebote)
+- Gewinn: günstigster anderer Sofortkauf − Versand/Verpackung (`resale`, 5 + 1 €) − Kaufpreis
+- Beendete Auktionen werden per getItem mit echtem Endpreis erfasst (max. 40 je Lauf)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Grafikkarten-Schnäppchen</title>
+<title>eBay-Schnäppchen</title>
 <meta name="description" content="Gebrauchte Grafikkarten bei eBay unter Marktpreis – automatisch aktualisiert.">
 <style>
   :root {
@@ -132,8 +132,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Grafikkarten-Schnäppchen</h1>
-    <p class="sub">Grafikkarten bei eBay (gebraucht und neu), die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defekte Karten, Zubehör, Komplett-PCs und Verkäufer mit weniger als 10 Bewertungen oder unter 97 % positiv sind herausgefiltert.</p>
+    <h1>eBay-Schnäppchen</h1>
+    <p class="sub">Grafikkarten, Mini-PCs und Arbeitsspeicher bei eBay (gebraucht und neu), die mindestens 15 % unter dem Marktpreis liegen – inkl. Versand, nur aus Deutschland. Defektes, Zubehör und Verkäufer mit weniger als 10 Bewertungen oder unter 97 % positiv sind herausgefiltert.</p>
     <div class="status" id="status">Lade Angebote …</div>
   </header>
 
@@ -144,6 +144,8 @@
     <button class="tab" role="tab" id="tabbtn-statistik" aria-controls="tab-statistik" data-tab="statistik">GPU-Statistik</button>
     <button class="tab" role="tab" id="tabbtn-minipc" aria-controls="tab-minipc" data-tab="minipc">Mini-PCs</button>
     <button class="tab" role="tab" id="tabbtn-ministat" aria-controls="tab-ministat" data-tab="ministat">Mini-PC-Statistik</button>
+    <button class="tab" role="tab" id="tabbtn-ram" aria-controls="tab-ram" data-tab="ram">RAM</button>
+    <button class="tab" role="tab" id="tabbtn-ramstat" aria-controls="tab-ramstat" data-tab="ramstat">RAM-Statistik</button>
   </nav>
 
   <section id="tab-angebote" role="tabpanel" aria-labelledby="tabbtn-angebote">
@@ -340,6 +342,74 @@
       <table class="sales">
         <thead><tr><th>Ende</th><th>Endpreis inkl. Versand</th><th>Gebote</th><th>Ergebnis</th><th>Ausstattung</th><th>Geschätzter Wert</th><th>Angebot</th></tr></thead>
         <tbody id="msEnded"></tbody>
+      </table>
+    </div>
+  </div>
+  </section>
+
+  <section id="tab-ram" role="tabpanel" aria-labelledby="tabbtn-ram" hidden>
+  <h2>Arbeitsspeicher</h2>
+  <p class="sub" style="margin-bottom:12px">DDR4 und DDR5, Laptop (SO-DIMM) und Desktop (DIMM), ab 8 GB; Kits zählen mit ihrer Gesamtgröße.
+    Server-RAM (ECC/Registered) ist ausgeschlossen. Schnäppchen liegen mindestens 15 % unter dem Marktpreis;
+    Weiterverkauf zum günstigsten anderen Sofortkauf.</p>
+  <div class="status" id="ramStatus">Lade Arbeitsspeicher …</div>
+  <div class="controls"><div class="chips" id="ramChips"></div></div>
+  <div class="controls">
+    <select id="ramForm" aria-label="Bauform">
+      <option value="all">Laptop und Desktop</option>
+      <option value="sodimm">Nur Laptop (SO-DIMM)</option>
+      <option value="dimm">Nur Desktop (DIMM)</option>
+    </select>
+    <select id="ramType" aria-label="Angebotsformat">
+      <option value="all">Alle Formate</option>
+      <option value="bin">Nur Sofort-Kaufen</option>
+      <option value="auction">Nur Auktionen</option>
+    </select>
+    <select id="ramSort" aria-label="Sortierung">
+      <option value="ending">Endet bald</option>
+      <option value="profit">Größter Gewinn</option>
+      <option value="discount">Größter Rabatt</option>
+      <option value="perGB">Niedrigster Preis je GB</option>
+    </select>
+  </div>
+  <div class="grid" id="ramGrid"></div>
+
+  <h3 style="font-size:15px;margin:24px 0 8px">Marktpreise</h3>
+  <p class="sub" style="margin-bottom:8px">Referenz ist der Median der beobachteten Auktions-Endpreise (ab 5 Verkäufen),
+    sonst das günstigste Viertel der Sofort-Kaufen-Angebote.</p>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>Markt</th><th>Referenz</th><th>je GB</th><th>Günstigster Sofortkauf</th><th>Angebote</th><th>Verkauft (Median)</th></tr></thead>
+    <tbody id="ramMarkets"></tbody>
+  </table></div>
+
+  <h3 style="font-size:15px;margin:20px 0 8px">Günstige Angebote, die ausgefiltert wurden</h3>
+  <div class="tablewrap"><table class="sales">
+    <thead><tr><th>Preis</th><th>Grund</th><th>Angebot</th></tr></thead>
+    <tbody id="ramRejected"></tbody>
+  </table></div>
+  </section>
+
+  <section id="tab-ramstat" role="tabpanel" aria-labelledby="tabbtn-ramstat" hidden>
+  <h2>RAM-Preisstatistik</h2>
+  <div class="controls" style="margin-top:0">
+    <select id="rsMarket" aria-label="Markt"></select>
+  </div>
+  <div class="viz">
+    <div class="tiles" id="rsTiles"></div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Preisverlauf</h3>
+    <div class="chartbox">
+      <div class="legend">
+        <span><svg width="18" height="10"><line x1="1" y1="5" x2="17" y2="5" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round"/></svg>Günstigster verfügbarer Sofortkauf</span>
+        <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.5" fill="var(--series-2)"/></svg>Verkauf per Auktion</span>
+      </div>
+      <svg id="rsChart" role="img" aria-label="Preisverlauf: günstigster Sofortkauf und Auktionsverkäufe"></svg>
+      <div class="tip" id="rsTip" hidden></div>
+    </div>
+    <h3 style="font-size:15px;margin:20px 0 8px">Beendete Auktionen</h3>
+    <div class="tablewrap">
+      <table class="sales">
+        <thead><tr><th>Ende</th><th>Endpreis inkl. Versand</th><th>Gebote</th><th>Ergebnis</th><th>Markt</th><th>Angebot</th></tr></thead>
+        <tbody id="rsEnded"></tbody>
       </table>
     </div>
   </div>
@@ -986,6 +1056,151 @@ async function msLoad() {
 }
 msLoad();
 
+// ---- Arbeitsspeicher ----
+const ram = { data: null, market: "all", form: "all", type: "all", sort: "ending" };
+const ramName = (d) => `${d.ddr.toUpperCase()} ${d.form === "sodimm" ? "SO-DIMM" : "DIMM"}`;
+
+function ramCard(d) {
+  const r = ram.data.resale ?? { shipping: 5, packaging: 1 };
+  const longRunning = d.auction && d.endsAt && Date.parse(d.endsAt) - Date.now() > 864e5;
+  const resale = d.resale?.price;
+  const maxTotal = resale ? resale - r.shipping - r.packaging - Math.max(5, resale * 0.1) : null;
+  const meta = el("div", { class: "meta" },
+    el("span", { class: "tag" + (d.auction ? " auction" : "") }, d.auction ? `Auktion · aktuelles Gebot · ${d.bids} Gebot${d.bids === 1 ? "" : "e"}` : "Sofort-Kaufen"),
+    d.endsAt ? el("span", { class: "tag" }, timeLeft(d.endsAt)) : null,
+    d.bestOffer ? el("span", { class: "tag offer" }, "Preisvorschlag") : null,
+    el("span", { class: "tag" }, `${ramName(d)} · ${d.modules > 1 ? `${d.modules}×${d.total / d.modules} GB` : `${d.total} GB`}`),
+    d.speed ? el("span", { class: "tag" }, `${d.speed} MHz`) : null,
+    d.condition ? el("span", { class: "tag" }, d.condition) : null,
+    d.seller?.score != null ? el("span", { class: "tag" }, `Verkäufer: ${d.seller.score} Bew.`) : null);
+  const rows = [
+    d.profit != null ? el("div", { class: "profit" + (d.profit > 0 && !longRunning ? "" : " neg") },
+      el("span", {}, longRunning ? "Gewinn beim aktuellen Gebot (Zwischenstand)" : d.auction ? "Gewinn beim aktuellen Gebot" : "Gewinn bei Weiterverkauf",
+        el("span", { class: "why" }, `günstigster Sofortkauf ${euro0(resale)} − Versand/Verpackung ${euro0(r.shipping + r.packaging)}`)),
+      el("b", {}, longRunning ? "offen" : `${d.profit >= 0 ? "+" : "−"}${euro0(Math.abs(d.profit))}`)) : null,
+    el("div", { class: "mkrow" }, el("span", {}, `Marktpreis ${d.market}`, el("span", { style: "display:block;font-size:11px;color:var(--muted)" },
+      d.basis === "sold" ? "Median beobachteter Auktions-Endpreise" : "günstigstes Viertel der Sofortkäufe")), el("b", {}, euro0(d.reference))),
+    el("div", { class: "mkrow" }, el("span", {}, "Preis je GB"), el("b", {}, `${eur.format(d.perGB)}`)),
+    d.resale ? el("div", { class: "mkrow" }, el("span", {}, "Günstigster Sofortkauf sonst"),
+      el("a", { href: d.resale.url, target: "_blank", rel: "noopener" }, `${euro0(d.resale.price)} ansehen ›`)) : null,
+    d.auction && maxTotal > 0 ? el("div", { class: maxTotal > d.price ? "hint good" : "hint bad" },
+      `Lohnendes Maximalgebot: ${euro0(maxTotal - (d.shipping ?? 0))}` + (d.shipping ? ` (+ ${euro0(d.shipping)} Versand)` : "")) : null,
+  ];
+  return el("article", { class: "card" },
+    el("a", { class: "cardlink", href: d.url, target: "_blank", rel: "noopener" },
+      el("div", { class: "thumb", style: d.image ? `background-image:url("${encodeURI(d.image)}")` : "" },
+        d.discount > 0 ? el("span", { class: "badge" }, `−${d.discount} %`) : null),
+      el("div", { class: "body" },
+        el("div", { class: "title" }, d.title), meta,
+        el("div", { class: "price" }, eur.format(d.price)),
+        el("div", { class: "ref" }, `inkl. Versand · ${d.market}`))),
+    el("div", { class: "mkwrap" }, el("div", { class: "mk" }, ...rows)));
+}
+
+function ramRender() {
+  const d = ram.data;
+  if (!d) return;
+  const list = d.deals.filter((x) => (ram.market === "all" || x.ddr === ram.market)
+    && (ram.form === "all" || x.form === ram.form)
+    && (ram.type === "all" || (ram.type === "auction") === x.auction)
+    && (!x.endsAt || Date.parse(x.endsAt) > Date.now()));
+  const by = {
+    ending: (a, b) => endOrder(a, b) || (b.profit ?? -1e9) - (a.profit ?? -1e9),
+    profit: (a, b) => (b.profit ?? -1e9) - (a.profit ?? -1e9), discount: (a, b) => b.discount - a.discount, perGB: (a, b) => a.perGB - b.perGB,
+  };
+  list.sort(by[ram.sort]);
+  document.getElementById("ramGrid").replaceChildren(...(list.length ? list.map(ramCard)
+    : [el("p", { class: "empty" }, d.deals.length ? "Keine Angebote für diesen Filter." : "Gerade keine Schnäppchen.")]));
+  const count = (k) => d.deals.filter((x) => k === "all" || x.ddr === k).length;
+  document.getElementById("ramChips").replaceChildren(...[["all", "Alle"], ["ddr4", "DDR4"], ["ddr5", "DDR5"]].map(([key, text]) => {
+    const b = el("button", { class: "chip", "aria-pressed": String(ram.market === key) }, `${text} (${count(key)})`);
+    b.onclick = () => { ram.market = key; ramRender(); };
+    return b;
+  }));
+}
+
+async function ramLoad() {
+  try {
+    const res = await fetch("data/ram.json", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    ram.data = await res.json();
+  } catch {
+    document.getElementById("ramStatus").textContent = "Noch keine RAM-Daten – sie kommen mit dem nächsten stündlichen Lauf.";
+    return;
+  }
+  const d = ram.data;
+  document.getElementById("ramStatus").textContent = `Stand: ${new Date(d.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}`
+    + ` · ${d.offerCount ?? 0} Angebote ausgewertet · ${d.deals.length} Schnäppchen`;
+  document.getElementById("ramMarkets").replaceChildren(...(d.markets.length ? d.markets.map((m) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, m.key),
+    el("td", {}, m.reference != null ? euro0(m.reference) : "–", m.basis === "sold" ? el("span", { style: "color:var(--muted)" }, " (Verkäufe)") : null),
+    el("td", { style: "white-space:nowrap" }, m.perGB != null ? eur.format(m.perGB) : "–"),
+    el("td", {}, m.cheapestBin ? el("a", { href: m.cheapestBin.url, target: "_blank", rel: "noopener" }, euro0(m.cheapestBin.price)) : "–"),
+    el("td", {}, `${m.offers} + ${m.auctions} Auktionen`),
+    el("td", {}, m.soldCount ? `${euro0(m.soldMedian)} (${m.soldCount})` : "–")))
+    : [el("tr", {}, el("td", { colspan: "6", style: "color:var(--muted)" }, "Noch keine Daten."))]));
+  document.getElementById("ramRejected").replaceChildren(...(d.rejected.length ? d.rejected.map((x) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, eur.format(x.price)), el("td", {}, x.reason),
+    el("td", {}, el("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title))))
+    : [el("tr", {}, el("td", { colspan: "3", style: "color:var(--muted)" }, "Keine."))]));
+  ramRender();
+  rsLoad();
+}
+document.getElementById("ramForm").onchange = (e) => { ram.form = e.target.value; ramRender(); };
+document.getElementById("ramType").onchange = (e) => { ram.type = e.target.value; ramRender(); };
+document.getElementById("ramSort").onchange = (e) => { ram.sort = e.target.value; ramRender(); };
+ramLoad();
+
+// ---- RAM-Statistik ----
+const rs = { data: null, market: null };
+function rsRender() {
+  const d = rs.data;
+  if (!d || !rs.market) return;
+  const ended = d.ended.filter((x) => x.key === rs.market);
+  const soldList = ended.filter((x) => x.result === "sold");
+  const prices = soldList.map((x) => x.price).sort((a, b) => a - b);
+  const med = prices.length ? (prices.length % 2 ? prices[prices.length >> 1] : (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2) : null;
+  const m = (ram.data?.markets ?? []).find((x) => x.key === rs.market);
+  const gb = Number(rs.market.match(/(\d+) GB/)?.[1]);
+  document.getElementById("rsTiles").replaceChildren(
+    tile("Verkauft (Median, 30 Tage)", med != null ? euro0(med) : "–", med != null ? `${eur.format(med / gb)} je GB · ${prices.length} Verkäufe` : "noch keine Verkäufe"),
+    tile("Typische Spanne", prices.length >= 4 ? `${euro0(prices[Math.floor(prices.length * 0.25)])} – ${euro0(prices[Math.floor(prices.length * 0.75)])}` : "–", "mittlere 50 % der Verkäufe"),
+    tile("Auktionen (30 Tage)", `${soldList.length} von ${ended.length} verkauft`, ended.length ? "beendete Auktionen" : "noch keine beendet"),
+    tile("Günstigster Sofortkauf", m?.cheapestBin ? euro0(m.cheapestBin.price) : "–",
+      m?.cheapestBin ? el("a", { href: m.cheapestBin.url, target: "_blank", rel: "noopener" }, "Angebot ansehen") : "gerade keiner"));
+  const RESULT = { sold: "verkauft", nobids: "keine Gebote", reserve: "Mindestpreis nicht erreicht", unknown: "Endpreis unbekannt" };
+  document.getElementById("rsEnded").replaceChildren(...(ended.length ? ended.slice(0, 100).map((x) => el("tr", {},
+    el("td", { style: "white-space:nowrap" }, dateFmt(x.at, true)),
+    el("td", {}, x.price != null ? eur.format(x.price) : "–", x.result === "unknown" ? el("span", { style: "color:var(--muted)" }, " (zuletzt gesehen)") : null),
+    el("td", {}, String(x.bids ?? "–")),
+    el("td", { class: x.result === "sold" ? "res-sold" : "" }, RESULT[x.result] ?? x.result),
+    el("td", { style: "white-space:nowrap" }, x.key, x.speed ? ` · ${x.speed} MHz` : ""),
+    el("td", {}, el("a", { href: x.url, target: "_blank", rel: "noopener" }, x.title ?? "ansehen"))))
+    : [el("tr", {}, el("td", { colspan: "6", style: "color:var(--muted)" }, "Noch keine beendeten Auktionen – jede endende Auktion kommt automatisch dazu."))]));
+  const line = (d.series[rs.market] ?? []).filter((p) => p[1] != null).map((p) => [p[0], p[1]]);
+  const dots = soldList.map((x) => ({ t: x.at, price: x.price, kind: "auction", label: `Auktion: ${eur.format(x.price)}${x.speed ? ` · ${x.speed} MHz` : ""}` }));
+  priceChart(document.getElementById("rsChart"), document.getElementById("rsTip"), line, dots);
+}
+
+async function rsLoad() {
+  try {
+    const res = await fetch("data/ram-stats.json", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    rs.data = await res.json();
+  } catch {
+    rs.data = { ended: [], series: {} };
+  }
+  // Märkte mit den meisten Angeboten zuerst
+  const keys = (ram.data?.markets ?? []).slice().sort((a, b) => (b.offers + b.auctions) - (a.offers + a.auctions)).map((m) => m.key);
+  const sel = document.getElementById("rsMarket");
+  sel.replaceChildren(...keys.map((k) => el("option", { value: k }, k)));
+  rs.market = keys[0] ?? null;
+  sel.onchange = () => { rs.market = sel.value; rsRender(); };
+  rsRender();
+  let w = 0;
+  addEventListener("resize", () => { const svg = document.getElementById("rsChart"); if (svg.clientWidth && svg.clientWidth !== w) { w = svg.clientWidth; rsRender(); } });
+}
+
 function showTab(name) {
   if (!document.getElementById(`tab-${name}`)) name = "angebote";
   for (const b of document.querySelectorAll(".tab")) {
@@ -997,6 +1212,7 @@ function showTab(name) {
   // Diagramm braucht die sichtbare Breite
   if (name === "statistik" && stats.current) renderStats();
   if (name === "ministat") msRender();
+  if (name === "ramstat") rsRender();
 }
 for (const b of document.querySelectorAll(".tab")) {
   b.onclick = () => { history.replaceState(null, "", b.dataset.tab === "angebote" ? location.pathname : `#${b.dataset.tab}`); showTab(b.dataset.tab); };
