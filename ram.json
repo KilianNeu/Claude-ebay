@@ -42,12 +42,30 @@
     "uk",
     "import",
     "zoll",
-    "china"
+    "china",
+    "stück",
+    "stk"
   ],
   "searches": [
-    { "ddr": "ddr4", "form": "sodimm", "query": "ddr4 sodimm" },
-    { "ddr": "ddr4", "form": "dimm", "query": "ddr4 ram" },
-    { "ddr": "ddr5", "form": "sodimm", "query": "ddr5 sodimm" },
-    { "ddr": "ddr5", "form": "dimm", "query": "ddr5 ram" }
+    {
+      "ddr": "ddr4",
+      "form": "sodimm",
+      "query": "ddr4 sodimm"
+    },
+    {
+      "ddr": "ddr4",
+      "form": "dimm",
+      "query": "ddr4 ram"
+    },
+    {
+      "ddr": "ddr5",
+      "form": "sodimm",
+      "query": "ddr5 sodimm"
+    },
+    {
+      "ddr": "ddr5",
+      "form": "dimm",
+      "query": "ddr5 ram"
+    }
   ]
 }

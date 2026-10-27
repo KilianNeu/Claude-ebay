@@ -1133,7 +1133,9 @@ async function ramLoad() {
     + ` · ${d.offerCount ?? 0} Angebote ausgewertet · ${d.deals.length} Schnäppchen`;
   document.getElementById("ramMarkets").replaceChildren(...(d.markets.length ? d.markets.map((m) => el("tr", {},
     el("td", { style: "white-space:nowrap" }, m.key),
-    el("td", {}, m.reference != null ? euro0(m.reference) : "–", m.basis === "sold" ? el("span", { style: "color:var(--muted)" }, " (Verkäufe)") : null),
+    el("td", { style: "white-space:nowrap" }, m.referenceUsed != null ? `${euro0(m.referenceUsed)} gebr.` : "–",
+      m.referenceNew != null && m.referenceNew !== m.referenceUsed ? el("span", { style: "color:var(--muted)" }, ` · ${euro0(m.referenceNew)} neu`) : null,
+      m.basis === "sold" ? el("span", { style: "color:var(--muted)" }, " (Verkäufe)") : null),
     el("td", { style: "white-space:nowrap" }, m.perGB != null ? eur.format(m.perGB) : "–"),
     el("td", {}, m.cheapestBin ? el("a", { href: m.cheapestBin.url, target: "_blank", rel: "noopener" }, euro0(m.cheapestBin.price)) : "–"),
     el("td", {}, `${m.offers} + ${m.auctions} Auktionen`),

@@ -173,13 +173,18 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   for (const [key, list] of byKey) {
     const bins = list.filter((o) => !o.auction).sort((a, c) => a.total - c.total);
     const soldPrices = hist.ended.filter((x) => x.key === key && x.result === "sold").map((x) => x.price);
+    // Neu und gebraucht getrennt: Händlerpreise für Neuware heben sonst die Referenz für Gebrauchtes
+    const usedBins = bins.filter((o) => !o.isNew), newBins = bins.filter((o) => o.isNew);
     const p25 = quantile(bins.map((o) => o.total), 0.25);
+    const p25Used = usedBins.length >= 3 ? quantile(usedBins.map((o) => o.total), 0.25) : p25;
+    const p25New = newBins.length >= 3 ? quantile(newBins.map((o) => o.total), 0.25) : p25;
     const soldMedian = soldPrices.length ? median(soldPrices) : NaN;
     const reference = soldPrices.length >= config.minSold ? soldMedian : p25;
     const [r0] = list;
     const m = {
       key, ddr: r0.ram.ddr, form: r0.ram.form, total: r0.ram.total, offers: bins.length, auctions: list.length - bins.length,
-      reference: round(reference), basis: soldPrices.length >= config.minSold ? "sold" : "offers", p25: round(p25),
+      reference: round(reference), referenceUsed: round(soldPrices.length >= config.minSold ? soldMedian : p25Used),
+      referenceNew: round(soldPrices.length >= config.minSold ? Math.max(soldMedian, p25New) : p25New), basis: soldPrices.length >= config.minSold ? "sold" : "offers", p25: round(p25),
       soldMedian: round(soldMedian), soldCount: soldPrices.length,
       perGB: round2(reference / r0.ram.total),
       cheapestBin: bins[0] ? { id: bins[0].item.itemId, price: round2(bins[0].total), url: bins[0].item.itemWebUrl, title: bins[0].item.title } : null,
@@ -198,18 +203,20 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   for (const o of offers.values()) {
     const m = markets.get(o.key);
     if (!m?.reference || m.offers < 3) continue; // zu wenig Vergleich
-    if (!(o.total <= m.reference * config.dealThreshold && o.total >= m.reference * config.floorRatio)) continue;
+    const ref = o.isNew ? m.referenceNew : m.referenceUsed;
+    if (!(o.total <= ref * config.dealThreshold && o.total >= ref * config.floorRatio)) continue;
     const i = o.item;
-    // Weiterverkauf zum günstigsten anderen Sofortkauf
+    // Weiterverkauf zum günstigsten anderen Sofortkauf; ohne Gewinn kein Schnäppchen zum Handeln
     const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin : m.nextBin;
+    if (!resale || resale.price - r.shipping - r.packaging - o.total <= 0) continue;
     result.deals.push({
       id: i.itemId, title: i.title, url: i.itemWebUrl, image: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
       market: o.key, ddr: o.ram.ddr, form: o.ram.form, total: o.ram.total, modules: o.ram.modules, speed: o.ram.speed,
       condition: i.condition ?? null, isNew: o.isNew, auction: o.auction, bids: o.auction ? i.bidCount ?? 0 : null, endsAt: i.itemEndDate ?? null,
       bestOffer: i.buyingOptions?.includes("BEST_OFFER") ?? false,
       seller: i.seller ? { score: i.seller.feedbackScore ?? null, positive: i.seller.feedbackPercentage ?? null } : null,
-      price: round2(o.total), shipping: round2(num(i.shippingOptions?.[0]?.shippingCost)), perGB: round2(o.total / o.ram.total), reference: m.reference, basis: m.basis,
-      discount: Math.round((1 - o.total / m.reference) * 100),
+      price: round2(o.total), shipping: round2(num(i.shippingOptions?.[0]?.shippingCost)), perGB: round2(o.total / o.ram.total), reference: ref, basis: m.basis,
+      discount: Math.round((1 - o.total / ref) * 100),
       resale: resale ? { price: resale.price, url: resale.url } : null,
       profit: resale ? round(resale.price - r.shipping - r.packaging - o.total) : null,
     });
@@ -224,7 +231,10 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   await writeFile(statsFile, JSON.stringify({ updatedAt: result.updatedAt, ended: hist.ended, series: hist.snapshots }));
   console.log(`Statistik: ${Object.keys(hist.auctions).length} Auktionen beobachtet, ${settled} beendet geprüft (${sold} verkauft), ${hist.ended.length} beendete in 30 Tagen.`);
   console.log(`${result.markets.length} Märkte, ${result.deals.length} Schnäppchen.`);
-  for (const m of result.markets) console.log(`  ${m.key}: ${m.offers} Sofortkäufe, ${m.auctions} Auktionen, Referenz ${m.reference ?? "–"} € (${m.basis}), günstigster ${m.cheapestBin?.price ?? "–"} €`);
+  for (const m of result.markets) {
+    console.log(`  ${m.key}: ${m.offers} Sofortkäufe, ${m.auctions} Auktionen, Referenz gebraucht ${m.referenceUsed ?? "–"} € / neu ${m.referenceNew ?? "–"} € (${m.basis}), günstigster ${m.cheapestBin?.price ?? "–"} € – ${m.cheapestBin?.title ?? ""}`);
+    for (const x of result.deals.filter((d) => d.market === m.key).slice(0, 3)) console.log(`    Schnäppchen: ${x.price} € (Ref. ${x.reference} €, Gewinn ${x.profit} €, ${x.auction ? "Auktion" : "Sofort"}) – ${x.title}`);
+  }
 }
 
 await writeFile(outFile, JSON.stringify(result, null, 2));
