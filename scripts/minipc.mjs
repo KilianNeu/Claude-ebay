@@ -192,7 +192,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
         if (reason === "CPU nicht im Titel" && !cache[i.itemId]
           && (i.buyingOptions?.includes("AUCTION") || totalPrice(i) >= config.minPrice)) { pending.push({ i, f }); continue; }
         if (reason) {
-          const kind = reason.replace(/ \(.*\)$|„.*“|\d+/g, "").trim();
+          const kind = reason.replace(/ \(.*\)$|„.*“|: [\d?]+ Bewertungen|\d+ €$/g, "").trim();
           reasons[kind] = (reasons[kind] ?? 0) + 1;
           if (!/Baureihe|CPU nicht|Mindestpreis/.test(reason) && !i.buyingOptions?.includes("AUCTION")) {
             rejected.set(i.itemId, { price: round2(totalPrice(i)), title: i.title, url: i.itemWebUrl, reason, family: f.label });
@@ -219,7 +219,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     cache[i.itemId] = { at: now, text };
     return text;
   };
-  pending.sort((a, c) => totalPrice(a.i) - totalPrice(c.i));
+  // Teure zuerst: ohne CPU im Titel steckt meist alte Hardware drin, die neueren kosten mehr.
+  pending.sort((a, c) => totalPrice(c.i) - totalPrice(a.i));
   for (const { i, f } of pending) {
     if (lookups >= MAX_LOOKUPS) break;
     const text = await lookup(i);
