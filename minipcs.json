@@ -10,6 +10,26 @@
   "dealThreshold": 0.85,
   "floorRatio": 0.4,
   "minCpuSamples": 3,
+  "ddrByModel": {
+    "NUC 11 Pro": "ddr4",
+    "NUC 11 Performance": "ddr4",
+    "NUC 11 Enthusiast": "ddr4",
+    "NUC 11": "ddr4",
+    "NUC 12 Pro": "ddr4",
+    "NUC 12 Enthusiast": "ddr4",
+    "NUC 13 Pro": "ddr4",
+    "NUC 14 Pro": "ddr5",
+    "ThinkCentre M70q Gen 2": "ddr4",
+    "ThinkCentre M90q Gen 2": "ddr4",
+    "ThinkCentre M70q Gen 3": "ddr4",
+    "ThinkCentre M90q Gen 3": "ddr5",
+    "HP 800 G8": "ddr4",
+    "HP 805 G8": "ddr4",
+    "HP 800 G9": "ddr5",
+    "Esprimo Q7010": "ddr4",
+    "Esprimo G9010": "ddr4",
+    "NUC 12": "ddr4"
+  },
   "resale": {
     "shipping": 7,
     "packaging": 3

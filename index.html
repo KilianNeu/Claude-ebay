@@ -297,10 +297,10 @@
 
   <h3 style="font-size:15px;margin:20px 0 8px">Modellnamen → CPU</h3>
   <p class="sub" style="margin-bottom:8px">Steht die CPU nicht im Titel, hilft der Modellname: Die Generation kommt aus einer festen Tabelle
-    (bei NUCs mit Klasse sogar die genaue CPU), dazu lernt das Skript aus Angeboten, die Modell und CPU nennen. Eine gelernte CPU gilt ab
+    (bei NUCs mit Klasse sogar die genaue CPU), ebenso der RAM-Typ (fett = Tabelle, dahinter beobachtet), dazu lernt das Skript aus Angeboten, die Modell und CPU nennen. Eine gelernte CPU gilt ab
     3 Angeboten und 80 % Anteil als Vermutung.</p>
   <div class="tablewrap"><table class="sales">
-    <thead><tr><th>Modell</th><th>Generation (Tabelle)</th><th>Beobachtete CPUs</th><th>Über Modell erkannt</th><th>Als zu alt aussortiert</th></tr></thead>
+    <thead><tr><th>Modell</th><th>Generation (Tabelle)</th><th>Beobachtete CPUs</th><th>RAM-Typ</th><th>Über Modell erkannt</th><th>Als zu alt aussortiert</th></tr></thead>
     <tbody id="mpModels"></tbody>
   </table></div>
 
@@ -832,7 +832,8 @@ function mpCard(d) {
       el("b", {}, longRunning ? "offen" : `${d.profit >= 0 ? "+" : "−"}${euro0(Math.abs(d.profit))}`)),
     d.cpuGuessed ? el("div", { class: "mkrow" }, el("span", { style: "color:var(--muted)" }, `CPU nicht angegeben, ${d.cpuSource} – vor dem Kauf prüfen`)) : null,
     el("div", { class: "mkrow" }, el("span", {}, `Barebone (${d.baseBasis}, ${d.baseCount}×)`), el("b", {}, euro0(d.base))),
-    el("div", { class: "mkrow" }, el("span", {}, `RAM ${gbText(d.ram)} ${d.ddr.toUpperCase()}`), el("b", {}, euro0(d.ramValue))),
+    el("div", { class: "mkrow" }, el("span", {}, `RAM ${gbText(d.ram)} ${d.ddr.toUpperCase()}`,
+      d.ddrSource && d.ram ? el("span", { style: "display:block;font-size:11px;color:var(--muted)" }, `DDR-Generation ${d.ddrSource}`) : null), el("b", {}, euro0(d.ramValue))),
     el("div", { class: "mkrow" }, el("span", {}, `SSD ${gbText(d.ssd)}`), el("b", {}, euro0(d.ssdValue))),
     d.sameConfig ? el("div", { class: "mkrow" }, el("span", {}, "Gleiche Konfiguration sonst ab"),
       el("a", { href: d.sameConfig.url, target: "_blank", rel: "noopener" }, `${euro0(d.sameConfig.price)} ansehen ›`)) : null,
@@ -900,9 +901,11 @@ async function mpLoad() {
     el("td", { style: "white-space:nowrap" }, x.model),
     el("td", {}, genText(x.gen)),
     el("td", {}, x.cpus.length ? x.cpus.map(([id, n]) => `${cpuName(id)} (${n})`).join(", ") : "–"),
+    el("td", { style: "white-space:nowrap" }, x.ddr ? el("b", {}, x.ddr.toUpperCase()) : null,
+      (x.ddrSeen ?? []).length ? `${x.ddr ? " · " : ""}${x.ddrSeen.map(([t, n]) => `${t.toUpperCase()} (${n})`).join(", ")}` : x.ddr ? "" : "–"),
     el("td", {}, String(x.viaModel)),
     el("td", {}, String(x.tooOld))))
-    : [el("tr", {}, el("td", { colspan: "5", style: "color:var(--muted)" }, "Noch keine Daten."))]));
+    : [el("tr", {}, el("td", { colspan: "6", style: "color:var(--muted)" }, "Noch keine Daten."))]));
   document.getElementById("mpGroups").replaceChildren(...(d.groups.length ? d.groups.map((g) => el("tr", {},
     el("td", {}, cpuName(g.cpu)),
     el("td", {}, gbText(g.ram === "?" ? null : Number(g.ram))), el("td", {}, gbText(g.ssd === "?" ? null : Number(g.ssd))),

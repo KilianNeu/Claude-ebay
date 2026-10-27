@@ -146,7 +146,23 @@ export function parseSpecs(title) {
 }
 
 // DDR-Generation, wenn sie nicht im Titel steht: neuere Plattformen nutzen DDR5.
-const ddrFor = (cpu, specs) => specs.ddr ?? ((cpu.vendor === "intel" && cpu.gen >= 14) || (cpu.vendor === "amd" && cpu.gen >= 6000) ? "ddr5" : "ddr4");
+// Reihenfolge: Angabe im Titel/in den Merkmalen, Tabelle je Modell (ddrByModel), gelernt aus Angeboten mit
+// Modell und DDR-Angabe, zuletzt nach CPU-Generation (bis 11. Gen bzw. Ryzen 5000 immer DDR4).
+let learnedDdr = {};
+function ddrLearned(key) {
+  const counts = Object.entries(learnedDdr[key] ?? {}).map(([ddr, items]) => [ddr, Object.keys(items).length]).sort((a, b) => b[1] - a[1]);
+  const total = counts.reduce((sum, [, n]) => sum + n, 0);
+  return total >= 3 && counts[0][1] / total >= 0.8 ? { ddr: counts[0][0], n: counts[0][1], total } : null;
+}
+function ddrFor(cpu, specs, model) {
+  if (specs.ddr) return { ddr: specs.ddr, source: null };
+  if (model && config.ddrByModel?.[model]) return { ddr: config.ddrByModel[model], source: `laut Tabelle für ${model}` };
+  const l = model && ddrLearned(model);
+  if (l) return { ddr: l.ddr, source: `vermutet: ${l.n} von ${l.total} Angeboten ${model} mit ${l.ddr.toUpperCase()}` };
+  const ddr5 = (cpu.vendor === "intel" && cpu.gen >= 14) || (cpu.vendor === "amd" && cpu.gen >= 6000);
+  const sure = (cpu.vendor === "intel" && cpu.gen <= 11) || (cpu.vendor === "amd" && cpu.gen <= 5000) || ddr5;
+  return { ddr: ddr5 ? "ddr5" : "ddr4", source: sure ? null : `angenommen (${cpu.gen}. Gen gibt es mit DDR4 und DDR5)` };
+}
 
 const tooOld = (cpu) => (cpu.vendor === "intel" ? cpu.gen < config.minIntelGen : cpu.gen < config.minRyzenSeries);
 
@@ -243,12 +259,14 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   const cache = await readFile(cacheFile, "utf8").then(JSON.parse).catch(() => ({}));
   const pending = []; // CPU nicht im Titel, Merkmale noch nicht bekannt
   const hist = await readFile(historyFile, "utf8").then(JSON.parse).catch(() => ({}));
-  hist.auctions ??= {}; hist.ended ??= []; hist.snapshots ??= []; hist.models ??= {};
-  learned = hist.models;
+  hist.auctions ??= {}; hist.ended ??= []; hist.snapshots ??= []; hist.models ??= {}; hist.modelsDdr ??= {};
+  learned = hist.models; learnedDdr = hist.modelsDdr;
   const addOffer = (i, f, extra) => {
     const cpu = resolveCpu(`${i.title} ${extra}`, f);
     const specs = parseSpecs(`${i.title} ${extra}`);
-    offers.push({ item: i, family: f.label, cpu, specs, ddr: ddrFor(cpu, specs), total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
+    const model = parseModel(`${i.title} ${extra}`, f)?.key ?? null;
+    const { ddr, source: ddrSource } = ddrFor(cpu, specs, model);
+    offers.push({ item: i, family: f.label, cpu, specs, model, ddr, ddrSource, total: totalPrice(i), auction: i.buyingOptions?.includes("AUCTION") ?? false });
   };
   for (const f of config.families) {
     try {
@@ -258,11 +276,14 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
       ]);
       let kept = 0;
       const reasons = {};
-      // Erst lernen: Angebote, die Modell und CPU nennen
+      // Erst lernen: Angebote, die Modell und CPU bzw. DDR-Generation nennen
       for (const i of [...fixed, ...auctions]) {
         const text = `${i.title ?? ""} ${cache[i.itemId]?.text ?? ""}`;
-        const cpu = parseCpu(text), model = cpu && !cpu.generic && parseModel(text, f);
-        if (model) ((learned[model.key] ??= {})[cpu.id] ??= {})[i.itemId] = now;
+        const model = parseModel(text, f);
+        if (!model) continue;
+        const cpu = parseCpu(text), ddr = parseSpecs(text).ddr;
+        if (cpu && !cpu.generic) ((learned[model.key] ??= {})[cpu.id] ??= {})[i.itemId] = now;
+        if (ddr) ((learnedDdr[model.key] ??= {})[ddr] ??= {})[i.itemId] = now;
       }
       for (const i of [...fixed, ...auctions]) {
         if (offers.some((o) => o.item.itemId === i.itemId) || pending.some((p) => p.i.itemId === i.itemId)) continue;
@@ -290,7 +311,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   }
 
   // Artikelmerkmale nachladen: zuerst Angebote ohne CPU im Titel, dann solche mit unbekanntem RAM/SSD
-  // oder nur vermuteter CPU.
+  // oder nur vermuteter CPU bzw. DDR-Generation.
   // Jedes Angebot wird nur einmal abgefragt (Zwischenspeicher im Branch data).
   let lookups = 0, recovered = 0, completed = 0;
   const lookup = async (i) => {
@@ -309,12 +330,14 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   }
   for (const o of offers) {
     if (lookups >= MAX_LOOKUPS) break;
-    if ((o.specs.ram != null && o.specs.ssd != null && !o.cpu.guessed) || cache[o.item.itemId]) continue;
+    const ddrUnsure = o.ddrSource && !o.ddrSource.startsWith("laut") && o.specs.ram !== 0;
+    if ((o.specs.ram != null && o.specs.ssd != null && !o.cpu.guessed && !ddrUnsure) || cache[o.item.itemId]) continue;
     const text = await lookup(o.item);
-    // Vermutete CPU durch die Angabe des Verkäufers ersetzen, falls vorhanden
-    const exact = o.cpu.guessed && parseCpu(`${o.item.title} ${text}`);
-    if (exact) { o.cpu = exact; o.ddr = ddrFor(exact, o.specs); }
     const specs = parseSpecs(`${o.item.title} ${text}`);
+    // Vermutete CPU bzw. DDR-Generation durch die Angabe des Verkäufers ersetzen, falls vorhanden
+    const exact = o.cpu.guessed && parseCpu(`${o.item.title} ${text}`);
+    if (exact) o.cpu = exact;
+    if (exact || specs.ddr) ({ ddr: o.ddr, source: o.ddrSource } = ddrFor(o.cpu, { ...o.specs, ddr: specs.ddr ?? o.specs.ddr }, o.model));
     if (specs.ram != null || specs.ssd != null) { o.specs = { ...specs, ram: o.specs.ram ?? specs.ram, ssd: o.specs.ssd ?? specs.ssd }; completed++; }
   }
   // Vermutung war falsch und die CPU ist zu alt → raus
@@ -363,7 +386,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     result.deals.push({
       id: i.itemId, title: i.title, url: i.itemWebUrl, image: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
       family: o.family, cpu: o.cpu.id, cpuSource: o.cpu.source ?? null, cpuGuessed: o.cpu.guessed ?? false,
-      ram: o.specs.ram, ssd: o.specs.ssd, ddr: o.ddr, barebone: o.specs.barebone, noPsu: o.specs.noPsu,
+      ram: o.specs.ram, ssd: o.specs.ssd, ddr: o.ddr, ddrSource: o.ddrSource, barebone: o.specs.barebone, noPsu: o.specs.noPsu,
       condition: i.condition ?? null, auction: o.auction, bids: o.auction ? i.bidCount ?? 0 : null, endsAt: i.itemEndDate ?? null,
       bestOffer: i.buyingOptions?.includes("BEST_OFFER") ?? false,
       seller: i.seller ? { score: i.seller.feedbackScore ?? null, positive: i.seller.feedbackPercentage ?? null } : null,
@@ -432,12 +455,12 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   for (const c of result.cpus) if (c.offers) snap[c.cpu] = [c.cheapest, c.base, c.offers];
   hist.snapshots.push({ t: now, c: snap });
   hist.snapshots = hist.snapshots.filter((x) => x.t > now - WINDOW);
-  for (const [key, cpus] of Object.entries(learned)) {
+  for (const [key, cpus] of [...Object.entries(learned), ...Object.entries(learnedDdr)]) {
     for (const [id, items] of Object.entries(cpus)) {
       for (const [itemId, at] of Object.entries(items)) if (at < now - 2 * WINDOW) delete items[itemId];
       if (!Object.keys(items).length) delete cpus[id];
     }
-    if (!Object.keys(cpus).length) delete learned[key];
+    if (!Object.keys(cpus).length) { if (learned[key] === cpus) delete learned[key]; else delete learnedDdr[key]; }
   }
   await writeFile(historyFile, JSON.stringify(hist));
   console.log(`Statistik: ${Object.keys(hist.auctions).length} Auktionen beobachtet, ${settled} beendet geprüft (${sold} verkauft), `
@@ -452,10 +475,11 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   // Modellnamen → CPU: Tabelle plus Gelerntes, zur Kontrolle auf der Seite
   const viaModel = {};
   for (const o of offers) if (o.cpu.model) viaModel[o.cpu.model] = (viaModel[o.cpu.model] ?? 0) + 1;
-  result.models = [...new Set([...Object.keys(learned), ...Object.keys(viaModel), ...Object.keys(modelOld)])].map((key) => {
+  result.models = [...new Set([...Object.keys(learned), ...Object.keys(learnedDdr), ...Object.keys(viaModel), ...Object.keys(modelOld)])].map((key) => {
     const cpus = Object.entries(learned[key] ?? {}).map(([id, items]) => [id, Object.keys(items).length]).sort((a, c) => c[1] - a[1]);
     return { model: key, gen: modelGens[key] ?? null, cpus: cpus.slice(0, 5), observed: cpus.reduce((sum, [, n]) => sum + n, 0),
-      viaModel: viaModel[key] ?? 0, tooOld: modelOld[key]?.size ?? 0 };
+      viaModel: viaModel[key] ?? 0, tooOld: modelOld[key]?.size ?? 0, ddr: config.ddrByModel?.[key] ?? null,
+      ddrSeen: Object.entries(learnedDdr[key] ?? {}).map(([d, items]) => [d, Object.keys(items).length]).sort((a, c) => c[1] - a[1]) };
   }).sort((a, c) => (c.observed + c.viaModel + c.tooOld) - (a.observed + a.viaModel + a.tooOld)).slice(0, 60);
   const sum = (o) => Object.values(o).reduce((a, b) => a + (b.size ?? b), 0);
   console.log(`Modellnamen: ${Object.keys(learned).length} Modelle gelernt, ${sum(viaModel)} Mini-PCs über den Modellnamen erkannt, `

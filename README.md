@@ -107,3 +107,8 @@ Verbrauch: 3 eBay-Abfragen je Schnellcheck, bei 5 Minuten also etwa 900 am Tag.
   `minipc-history.json`): Stecken in mindestens 3 Angeboten eines Modells zu ≥ 80 % dieselbe CPU,
   gilt sie als Vermutung („vermutet“ auf der Karte, zählt nicht in den Barebone-Wert); bei freiem
   Abfragebudget wird die Vermutung per Artikelmerkmale geprüft
+- RAM-Typ (DDR4/DDR5) im gleichen Stil: Angabe im Titel/in den Merkmalen, sonst Tabelle `ddrByModel`
+  in `minipcs.json` (z. B. NUC 12/13 Pro → DDR4, NUC 14 Pro und HP 800 G9 → DDR5), sonst gelernt aus
+  Angeboten mit Modell und DDR-Angabe (ab 3 Angeboten, 80 % Anteil), zuletzt nach CPU-Generation (bis
+  11. Gen/Ryzen 5000 sicher DDR4). Unsichere Fälle (12./13. Gen ohne Angabe) werden bei freiem Budget
+  per Artikelmerkmale geprüft; die Karte zeigt, woher die DDR-Generation stammt
