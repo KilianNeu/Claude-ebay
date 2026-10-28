@@ -140,3 +140,14 @@ Der stündliche Lauf legt den Stand zusätzlich als `usage.json` in den Branch `
 setzt aus, wenn die verbleibenden Abfragen bis zum Zurücksetzen nicht mehr für die stündlichen Läufe
 reichen (150 je Stunde reserviert) – an normalen Tagen greift das nie (≈ 4.400 von 5.000 Abfragen).
 Mehr Abfragen gibt es kostenlos über eBays „Application Growth Check“ im Developer-Portal.
+
+## Tabellen
+
+`scripts/tables.mjs` stellt nach jedem stündlichen Lauf alle gesammelten Daten als `data/tables.json`
+zusammen (Reiter „Tabellen“): je Kategorie beendete Auktionen, Verkäufe, beobachtete bzw. ausgewertete
+Angebote, Märkte und bei Mini-PCs die Modell- und CPU-Tabellen. Sortierbar per Klick auf den
+Spaltenkopf, filterbar über alle Spalten, Export als CSV (Semikolon, deutsches Zahlenformat).
+
+Die GPU-Historie wird bei jedem Lauf mit den aktuellen Filtern bereinigt (`stillMatches` in
+`scripts/lib.mjs`): Einträge aus der Zeit vor strengeren Filtern – etwa Modelleisenbahnen „Märklin 4080“
+als Verkauf einer RTX 4080 – fallen heraus und verfälschen den Verkaufs-Median nicht mehr.

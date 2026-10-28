@@ -360,7 +360,8 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     if (baseCache.has(cpu.id)) return baseCache.get(cpu.id);
     let r = residuals((o) => o.cpu.id === cpu.id), basis = cpu.id;
     if (r.length < config.minCpuSamples) { r = residuals((o) => o.cpu.tier === cpu.tier && o.cpu.gen === cpu.gen); basis = `${cpu.tier} Gen ${cpu.gen}`; }
-    const v = r.length >= config.minCpuSamples ? { base: median(r), count: r.length, basis } : null;
+    // Nie negativ: bei teurem RAM liegen manche Angebote unter dem reinen Bauteilwert
+    const v = r.length >= config.minCpuSamples ? { base: Math.max(0, median(r)), count: r.length, basis } : null;
     baseCache.set(cpu.id, v);
     return v;
   };
@@ -399,6 +400,15 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     });
   }
   result.deals.sort((a, c) => c.profit - a.profit);
+  // Alle ausgewerteten Angebote für die Tabellen-Ansicht
+  result.offers = offers.map((o) => {
+    const i = o.item, b = baseFor(o.cpu), known = o.specs.ram != null && o.specs.ssd != null;
+    const value = b && known ? b.base + partsValue(o) : null;
+    return { title: i.title, url: i.itemWebUrl, family: o.family, cpu: o.cpu.id, cpuSource: o.cpu.source ?? null, ram: o.specs.ram, ssd: o.specs.ssd,
+      ddr: o.ddr, barebone: o.specs.barebone, auction: o.auction, price: round2(o.total), bids: o.auction ? i.bidCount ?? 0 : null,
+      endsAt: i.itemEndDate ?? null, condition: i.condition ?? null, seller: i.seller?.feedbackScore ?? null,
+      value: round(value), discount: value ? Math.round((1 - o.total / value) * 100) : null };
+  });
 
   // Übersicht je CPU (Barebone-Werte) und häufige Konfigurationen
   for (const id of [...new Set(offers.map((o) => o.cpu.id))]) {

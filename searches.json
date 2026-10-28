@@ -115,7 +115,20 @@
     "nur der kühlkörper",
     "kühlkörper ohne",
     "grafikkartenhalter",
-    "kartenhalter"
+    "kartenhalter",
+    "core ultra",
+    "ultra 5",
+    "ultra 7",
+    "ultra 9",
+    "ssd",
+    "oled",
+    "omen",
+    "galaxy book",
+    "yoga",
+    "legion",
+    "workstation",
+    "thinkstation",
+    "high end pc"
   ],
   "excludeParts": [
     "kühlblock",

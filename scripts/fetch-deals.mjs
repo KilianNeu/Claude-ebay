@@ -12,7 +12,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import {
   config, getToken, search, getItem, num, totalPrice, excluded, quantile, median,
-  modelPattern, trusted, domestic, searchQuery, rejectReason,
+  modelPattern, trusted, domestic, searchQuery, rejectReason, stillMatches,
 } from "./lib.mjs";
 const outFile = new URL("../data/deals.json", import.meta.url);
 const historyFile = process.env.HISTORY_FILE ?? new URL("../data/history.json", import.meta.url);
@@ -49,6 +49,17 @@ if ((history.version ?? 0) < 2) history.sold = [];
 // mit Sofort-Kaufen-Option und Angebote vor der Filterkorrektur; Verkäufe und Auktionen bleiben erhalten.
 if ((history.version ?? 0) < 3) { history.snapshots = {}; history.cheapest = {}; }
 history.version = HISTORY_VERSION;
+// Bei jedem Lauf: Einträge, die nach den heutigen Regeln nicht mehr zum Modell passen, entfernen
+// (z. B. Modelleisenbahn "Märklin 4080" als Verkauf der RTX 4080), damit sie den Verkaufs-Median nicht verfälschen.
+{
+  const titleOf = (id) => history.listings?.[id]?.title;
+  const before = (history.sold?.length ?? 0) + (history.ended?.length ?? 0);
+  history.sold = (history.sold ?? []).filter((x) => stillMatches(x.model, titleOf(x.id), x.price));
+  history.ended = (history.ended ?? []).filter((x) => stillMatches(x.model, x.title ?? titleOf(x.id), x.price));
+  for (const [id, l] of Object.entries(history.listings ?? {})) if (!stillMatches(l.model, l.title, l.auction ? undefined : l.price)) delete history.listings[id];
+  const removed = before - history.sold.length - history.ended.length;
+  if (removed) console.log(`Historie bereinigt: ${removed} Verkäufe/Auktionen passten nicht mehr zu den Filtern.`);
+}
 let checksLeft = MAX_CHECKS, auctionChecksLeft = MAX_AUCTION_CHECKS, hybridChecksLeft = 30;
 const stats = { auctionFinal: 0, auctionUnsold: 0, auctionUnavailable: 0, vanishedSold: 0 };
 

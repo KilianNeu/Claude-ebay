@@ -61,6 +61,11 @@ jobs:
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
           USAGE_FILE: history/usage.json
         run: node scripts/usage.mjs
+      - name: Tabellen zusammenstellen
+        continue-on-error: true
+        env:
+          HISTORY_DIR: history
+        run: node scripts/tables.mjs
       - name: Preishistorie speichern
         working-directory: history
         run: |
@@ -81,7 +86,7 @@ jobs:
           cp data/deals.json data/stats.json _site/data/
           cp data/minipc.json data/minipc-stats.json _site/data/ 2>/dev/null || true
           cp data/ram.json data/ram-stats.json _site/data/ 2>/dev/null || true
-          cp data/usage.json _site/data/ 2>/dev/null || true
+          cp data/usage.json data/tables.json _site/data/ 2>/dev/null || true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

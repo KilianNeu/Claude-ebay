@@ -75,6 +75,16 @@
   tr:last-child td { border-bottom: 0; }
   td a { color: var(--accent); white-space: nowrap; margin-right: 10px; }
   .tablewrap { overflow-x: auto; }
+  /* Tabellen-Reiter: sortierbare Köpfe, kompakte Zeilen */
+  .datatable th { cursor: pointer; user-select: none; white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+  .datatable th:hover { color: var(--text); }
+  .datatable th[aria-sort] { color: var(--accent); }
+  .datatable td { padding: 7px 10px; font-size: 13px; }
+  .datatable td.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .datatable td.d { white-space: nowrap; }
+  .datatable td a { display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .dtwrap { max-height: 75vh; overflow: auto; border-radius: 8px; }
+  .dtsearch { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; flex: 1 1 200px; }
 
   .tips { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
   .tips div { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
@@ -146,6 +156,7 @@
     <button class="tab" role="tab" id="tabbtn-ministat" aria-controls="tab-ministat" data-tab="ministat">Mini-PC-Statistik</button>
     <button class="tab" role="tab" id="tabbtn-ram" aria-controls="tab-ram" data-tab="ram">RAM</button>
     <button class="tab" role="tab" id="tabbtn-ramstat" aria-controls="tab-ramstat" data-tab="ramstat">RAM-Statistik</button>
+    <button class="tab" role="tab" id="tabbtn-tabellen" aria-controls="tab-tabellen" data-tab="tabellen">Tabellen</button>
   </nav>
 
   <section id="tab-angebote" role="tabpanel" aria-labelledby="tabbtn-angebote">
@@ -413,6 +424,22 @@
       </table>
     </div>
   </div>
+  </section>
+
+  <section id="tab-tabellen" role="tabpanel" aria-labelledby="tabbtn-tabellen" hidden>
+  <h2>Alle Daten</h2>
+  <p class="sub" style="margin-bottom:12px">Alles, was die stündlichen Läufe sammeln, je Kategorie. Spaltenkopf anklicken zum Sortieren
+    (nochmal klicken kehrt um), Suchfeld filtert über alle Spalten, „CSV“ lädt die gefilterte Tabelle herunter (z. B. für Excel).</p>
+  <div class="status" id="dtStatus">Lade Tabellen …</div>
+  <div class="controls" style="margin-top:0"><div class="chips" id="dtCats"></div></div>
+  <div class="controls"><div class="chips" id="dtTables"></div></div>
+  <div class="controls">
+    <input class="dtsearch" id="dtSearch" type="search" placeholder="Filtern, z. B. 4070 oder verkauft" aria-label="Tabelle filtern">
+    <button class="chip" id="dtCsv" type="button">CSV</button>
+  </div>
+  <p class="sub" id="dtNote" style="margin:0 0 8px"></p>
+  <div class="tablewrap dtwrap"><table class="datatable"><thead id="dtHead"></thead><tbody id="dtBody"></tbody></table></div>
+  <div class="controls"><button class="chip" id="dtMore" type="button" hidden>Weitere Zeilen anzeigen</button></div>
   </section>
 
   <footer>
@@ -1214,6 +1241,107 @@ fetch("data/usage.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : nu
     + ` · Stand ${new Date(u.updatedAt).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr`;
 }).catch(() => {});
 
+// ---- Tabellen ----
+const dt = { data: null, cat: null, table: null, sort: null, dir: 1, q: "", limit: 300 };
+const dtTable = () => dt.data?.categories.find((c) => c.id === dt.cat)?.tables.find((t) => t.id === dt.table);
+const dtText = (v, t) => v == null || v === "" ? "" : t === "link" ? v[0] : t === "date" ? dateFmt(v, true) : t === "eur" ? eur.format(v)
+  : t === "pct" ? `${v} %` : t === "num" ? v.toLocaleString("de-DE") : String(v);
+
+function dtRows() {
+  const t = dtTable();
+  if (!t) return [];
+  const q = dt.q.trim().toLowerCase();
+  let rows = q ? t.rows.filter((r) => r.some((v, i) => dtText(v, t.columns[i].t).toLowerCase().includes(q))) : t.rows.slice();
+  if (dt.sort != null) {
+    const i = dt.sort, type = t.columns[i].t;
+    const key = (v) => (v == null || v === "" ? null : type === "link" ? v[0].toLowerCase() : typeof v === "string" ? v.toLowerCase() : v);
+    rows.sort((a, b) => {
+      const x = key(a[i]), y = key(b[i]);
+      if (x === y) return 0;
+      if (x == null) return 1; // Leere Werte immer ans Ende
+      if (y == null) return -1;
+      return (x < y ? -1 : 1) * dt.dir;
+    });
+  }
+  return rows;
+}
+
+function dtRender() {
+  const d = dt.data;
+  if (!d) return;
+  document.getElementById("dtCats").replaceChildren(...d.categories.map((c) => {
+    const b = el("button", { class: "chip", "aria-pressed": String(dt.cat === c.id) }, c.label);
+    b.onclick = () => { dt.cat = c.id; dt.table = c.tables[0]?.id; dt.sort = null; dt.limit = 300; dtRender(); };
+    return b;
+  }));
+  const cat = d.categories.find((c) => c.id === dt.cat);
+  document.getElementById("dtTables").replaceChildren(...(cat?.tables ?? []).map((t) => {
+    const b = el("button", { class: "chip", "aria-pressed": String(dt.table === t.id) }, `${t.label} (${t.rows.length})`);
+    b.onclick = () => { dt.table = t.id; dt.sort = null; dt.limit = 300; dtRender(); };
+    return b;
+  }));
+  const t = dtTable();
+  if (!t) return;
+  document.getElementById("dtNote").textContent = t.note ?? "";
+  document.getElementById("dtHead").replaceChildren(el("tr", {}, ...t.columns.map((c, i) => {
+    const th = el("th", dt.sort === i ? { "aria-sort": dt.dir > 0 ? "ascending" : "descending" } : {}, c.l, dt.sort === i ? (dt.dir > 0 ? " ▲" : " ▼") : "");
+    th.onclick = () => {
+      // Zahlen und Daten zuerst absteigend (größte/neueste oben), Text aufsteigend
+      if (dt.sort === i) dt.dir = -dt.dir; else { dt.sort = i; dt.dir = ["text", "link"].includes(c.t) ? 1 : -1; }
+      dtRender();
+    };
+    return th;
+  })));
+  const rows = dtRows();
+  document.getElementById("dtBody").replaceChildren(...(rows.length ? rows.slice(0, dt.limit).map((r) => el("tr", {}, ...r.map((v, i) => {
+    const type = t.columns[i].t;
+    if (type === "link" && v) return el("td", {}, el("a", { href: v[1], target: "_blank", rel: "noopener", title: v[0] }, v[0]));
+    // Kurze Texte (Modell, Format, Ergebnis) nicht umbrechen; lange Listen (CPUs) dürfen umbrechen
+    const cls = ["eur", "num", "pct"].includes(type) ? "n" : type === "date" || String(v ?? "").length <= 30 ? "d" : "";
+    return el("td", { class: cls }, dtText(v, type));
+  }))) : [el("tr", {}, el("td", { colspan: String(t.columns.length), style: "color:var(--muted)" }, t.rows.length ? "Keine Treffer für den Filter." : "Noch keine Daten."))]));
+  const more = document.getElementById("dtMore");
+  more.hidden = rows.length <= dt.limit;
+  more.textContent = `Weitere Zeilen anzeigen (${rows.length - dt.limit} übrig)`;
+  document.getElementById("dtStatus").textContent = `Stand: ${new Date(d.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}`
+    + ` · ${rows.length} von ${t.rows.length} Zeilen`;
+}
+
+async function dtLoad() {
+  if (dt.data) return;
+  try {
+    const res = await fetch("data/tables.json", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+    dt.data = await res.json();
+  } catch {
+    document.getElementById("dtStatus").textContent = "Noch keine Tabellen – sie kommen mit dem nächsten stündlichen Lauf.";
+    return;
+  }
+  dt.cat = dt.data.categories[0]?.id;
+  dt.table = dt.data.categories[0]?.tables[0]?.id;
+  dtRender();
+}
+let dtTimer;
+document.getElementById("dtSearch").oninput = (e) => { clearTimeout(dtTimer); dtTimer = setTimeout(() => { dt.q = e.target.value; dt.limit = 300; dtRender(); }, 200); };
+document.getElementById("dtMore").onclick = () => { dt.limit += 500; dtRender(); };
+document.getElementById("dtCsv").onclick = () => {
+  const t = dtTable();
+  if (!t) return;
+  // Semikolon und Komma als Dezimaltrenner, damit Excel (deutsch) die Datei direkt richtig öffnet
+  const cell = (v, type) => {
+    if (v == null) return "";
+    if (type === "link") return `"${v[0].replace(/"/g, '""')}";"${v[1]}"`;
+    if (type === "date") return new Date(v).toLocaleString("de-DE");
+    if (typeof v === "number") return String(v).replace(".", ",");
+    return `"${String(v).replace(/"/g, '""')}"`;
+  };
+  const head = t.columns.flatMap((c) => c.t === "link" ? [c.l, "Link"] : [c.l]).join(";");
+  const body = dtRows().map((r) => r.map((v, i) => v == null && t.columns[i].t === "link" ? ";" : cell(v, t.columns[i].t)).join(";"));
+  const blob = new Blob(["\ufeff" + [head, ...body].join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = el("a", { href: URL.createObjectURL(blob), download: `${dt.cat}-${dt.table}.csv` });
+  document.body.append(a); a.click(); a.remove();
+};
+
 function showTab(name) {
   if (!document.getElementById(`tab-${name}`)) name = "angebote";
   for (const b of document.querySelectorAll(".tab")) {
@@ -1226,6 +1354,7 @@ function showTab(name) {
   if (name === "statistik" && stats.current) renderStats();
   if (name === "ministat") msRender();
   if (name === "ramstat") rsRender();
+  if (name === "tabellen") dtLoad();
 }
 for (const b of document.querySelectorAll(".tab")) {
   b.onclick = () => { history.replaceState(null, "", b.dataset.tab === "angebote" ? location.pathname : `#${b.dataset.tab}`); showTab(b.dataset.tab); };

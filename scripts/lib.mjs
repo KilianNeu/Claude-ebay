@@ -85,6 +85,18 @@ export function modelPattern(s) {
 
 // Unseriöse Verkäufer ausschließen: neue Konten mit kaum Bewertungen und Verkäufer mit zu
 // vielen negativen Bewertungen. Fehlt die Angabe, bleibt das Angebot drin.
+// Passt ein gespeicherter Eintrag (Titel, Preis) nach den heutigen Regeln noch zum Modell? Ältere Einträge
+// stammen teils aus der Zeit vor strengeren Filtern (Modelleisenbahnen "4080", Komplett-PCs …).
+// Ohne Titel lässt sich nichts prüfen – dann bleibt der Eintrag.
+// Den Mindestpreis nur bei Endpreisen bzw. Sofortkäufen prüfen (price weglassen bei laufenden Auktionen).
+export function stillMatches(label, title, price) {
+  const s = config.searches.find((x) => x.label === label);
+  if (!s) return false;
+  if (!title) return true;
+  const t = title.toLowerCase();
+  return modelPattern(s).test(t) && !excluded(t, [...(config.exclude ?? []), ...(s.exclude ?? [])]) && !(price < (s.minPrice ?? 0));
+}
+
 export function trusted(i) {
   const score = Number(i.seller?.feedbackScore), positive = Number(i.seller?.feedbackPercentage);
   if (Number.isFinite(score) && score < (config.minSellerFeedback ?? 0)) return false;

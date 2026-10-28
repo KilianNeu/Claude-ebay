@@ -172,6 +172,14 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   result.deals.sort((a, c) => (c.profit ?? -1e9) - (a.profit ?? -1e9));
   const order = (m) => `${m.ddr}${m.form === "sodimm" ? 0 : 1}${String(m.total).padStart(4, "0")}`;
   result.markets = [...markets.values()].sort((a, c) => order(a).localeCompare(order(c)));
+  // Alle ausgewerteten Angebote für die Tabellen-Ansicht
+  result.offers = [...offers.values()].map((o) => {
+    const i = o.item, m = markets.get(o.key), ref = o.isNew ? m?.referenceNew : m?.referenceUsed;
+    return { title: i.title, url: i.itemWebUrl, market: o.key, ddr: o.ram.ddr, form: o.ram.form, total: o.ram.total, modules: o.ram.modules,
+      speed: o.ram.speed, auction: o.auction, price: round2(o.total), perGB: round2(o.total / o.ram.total), bids: o.auction ? i.bidCount ?? 0 : null,
+      endsAt: i.itemEndDate ?? null, isNew: o.isNew, condition: i.condition ?? null, seller: i.seller?.feedbackScore ?? null,
+      reference: ref ?? null, discount: ref ? Math.round((1 - o.total / ref) * 100) : null };
+  });
   result.rejected = rejected.sort((a, c) => a.price - c.price).slice(0, 15);
   result.offerCount = offers.size;
 
