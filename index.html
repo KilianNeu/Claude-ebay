@@ -84,6 +84,15 @@
   .datatable td.d { white-space: nowrap; }
   .datatable td a { display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .dtwrap { max-height: 75vh; overflow: auto; border-radius: 8px; }
+  .dtfilters { margin: 0 0 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .dtfilters summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  .dtfgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 14px; margin-top: 10px; }
+  .dtfgrid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+  .dtfgrid select, .dtfgrid input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text); min-width: 0; width: 100%; box-sizing: border-box; }
+  .dtfgrid .dtrange { display: flex; gap: 6px; }
+  .dtfgrid .dtrange input[type=date] { padding: 6px 4px; }
+  .dtfgrid .on { border-color: var(--accent); }
   .dtsearch { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; flex: 1 1 200px; }
 
   .tips { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
@@ -429,7 +438,8 @@
   <section id="tab-tabellen" role="tabpanel" aria-labelledby="tabbtn-tabellen" hidden>
   <h2>Alle Daten</h2>
   <p class="sub" style="margin-bottom:12px">Alles, was die stündlichen Läufe sammeln, je Kategorie. Spaltenkopf anklicken zum Sortieren
-    (nochmal klicken kehrt um), Suchfeld filtert über alle Spalten, „CSV“ lädt die gefilterte Tabelle herunter (z. B. für Excel).</p>
+    (nochmal klicken kehrt um), Suchfeld durchsucht alle Spalten, unter „Filter“ gibt es je Spalte Auswahl oder Von–bis-Bereich.
+    „CSV“ lädt die gefilterte Tabelle herunter (z. B. für Excel).</p>
   <div class="status" id="dtStatus">Lade Tabellen …</div>
   <div class="controls" style="margin-top:0"><div class="chips" id="dtCats"></div></div>
   <div class="controls"><div class="chips" id="dtTables"></div></div>
@@ -437,6 +447,11 @@
     <input class="dtsearch" id="dtSearch" type="search" placeholder="Filtern, z. B. 4070 oder verkauft" aria-label="Tabelle filtern">
     <button class="chip" id="dtCsv" type="button">CSV</button>
   </div>
+  <details class="dtfilters" id="dtFilterBox">
+    <summary id="dtFilterSum">Filter</summary>
+    <div class="dtfgrid" id="dtFilterGrid"></div>
+    <div class="controls" style="margin:10px 0 0"><button class="chip" id="dtReset" type="button">Filter zurücksetzen</button></div>
+  </details>
   <p class="sub" id="dtNote" style="margin:0 0 8px"></p>
   <div class="tablewrap dtwrap"><table class="datatable"><thead id="dtHead"></thead><tbody id="dtBody"></tbody></table></div>
   <div class="controls"><button class="chip" id="dtMore" type="button" hidden>Weitere Zeilen anzeigen</button></div>
@@ -1242,7 +1257,7 @@ fetch("data/usage.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : nu
 }).catch(() => {});
 
 // ---- Tabellen ----
-const dt = { data: null, cat: null, table: null, sort: null, dir: 1, q: "", limit: 300 };
+const dt = { data: null, cat: null, table: null, sort: null, dir: 1, q: "", limit: 300, filters: {} };
 const dtTable = () => dt.data?.categories.find((c) => c.id === dt.cat)?.tables.find((t) => t.id === dt.table);
 const dtText = (v, t) => v == null || v === "" ? "" : t === "link" ? v[0] : t === "date" ? dateFmt(v, true) : t === "eur" ? eur.format(v)
   : t === "pct" ? `${v} %` : t === "num" ? v.toLocaleString("de-DE") : String(v);
@@ -1252,6 +1267,14 @@ function dtRows() {
   if (!t) return [];
   const q = dt.q.trim().toLowerCase();
   let rows = q ? t.rows.filter((r) => r.some((v, i) => dtText(v, t.columns[i].t).toLowerCase().includes(q))) : t.rows.slice();
+  // Spaltenfilter: Auswahl (gleich), Text (enthält), Bereich (von/bis; Datum ganztägig)
+  for (const [k, f] of Object.entries(dt.filters)) {
+    const i = Number(k), type = t.columns[i].t;
+    if (f.eq != null) rows = rows.filter((r) => (r[i] ?? "") === f.eq);
+    if (f.has) rows = rows.filter((r) => dtText(r[i], type).toLowerCase().includes(f.has.toLowerCase()));
+    if (f.min != null) rows = rows.filter((r) => r[i] != null && r[i] >= f.min);
+    if (f.max != null) rows = rows.filter((r) => r[i] != null && r[i] <= f.max);
+  }
   if (dt.sort != null) {
     const i = dt.sort, type = t.columns[i].t;
     const key = (v) => (v == null || v === "" ? null : type === "link" ? v[0].toLowerCase() : typeof v === "string" ? v.toLowerCase() : v);
@@ -1271,16 +1294,81 @@ function dtRender() {
   if (!d) return;
   document.getElementById("dtCats").replaceChildren(...d.categories.map((c) => {
     const b = el("button", { class: "chip", "aria-pressed": String(dt.cat === c.id) }, c.label);
-    b.onclick = () => { dt.cat = c.id; dt.table = c.tables[0]?.id; dt.sort = null; dt.limit = 300; dtRender(); };
+    b.onclick = () => { dt.cat = c.id; dt.table = c.tables[0]?.id; dt.sort = null; dt.limit = 300; dt.filters = {}; dtRender(); };
     return b;
   }));
   const cat = d.categories.find((c) => c.id === dt.cat);
   document.getElementById("dtTables").replaceChildren(...(cat?.tables ?? []).map((t) => {
     const b = el("button", { class: "chip", "aria-pressed": String(dt.table === t.id) }, `${t.label} (${t.rows.length})`);
-    b.onclick = () => { dt.table = t.id; dt.sort = null; dt.limit = 300; dtRender(); };
+    b.onclick = () => { dt.table = t.id; dt.sort = null; dt.limit = 300; dt.filters = {}; dtRender(); };
     return b;
   }));
+  dtFilters();
+  dtRenderTable();
+}
+
+// Filterkasten: je Spalte ein passendes Bedienelement
+function dtFilters() {
   const t = dtTable();
+  if (!t) return;
+  const update = () => {
+    const n = Object.keys(dt.filters).length;
+    document.getElementById("dtFilterSum").textContent = n ? `Filter (${n} aktiv)` : "Filter";
+    dt.limit = 300;
+    dtRenderTable();
+  };
+  const set = (i, f, ctl) => {
+    const clean = Object.fromEntries(Object.entries(f).filter(([, v]) => v != null && v !== ""));
+    if (Object.keys(clean).length) dt.filters[i] = clean; else delete dt.filters[i];
+    ctl.forEach((c) => c.classList.toggle("on", Boolean(dt.filters[i])));
+    update();
+  };
+  const fields = t.columns.map((c, i) => {
+    const cur = dt.filters[i] ?? {};
+    if (["eur", "num", "pct", "date"].includes(c.t)) {
+      const isDate = c.t === "date";
+      const toInput = (v) => (v == null ? "" : isDate ? new Date(v - new Date(v).getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : String(v));
+      const attrs = isDate ? { type: "date" } : { type: "number", step: "any", inputmode: "decimal" };
+      const from = el("input", { ...attrs, placeholder: "von", "aria-label": `${c.l} von`, value: toInput(cur.min) });
+      const to = el("input", { ...attrs, placeholder: "bis", "aria-label": `${c.l} bis`, value: toInput(cur.max) });
+      const read = (inp, end) => {
+        if (inp.value === "") return null;
+        if (!isDate) return Number(inp.value.replace(",", "."));
+        const [y, m, d] = inp.value.split("-").map(Number);
+        return end ? new Date(y, m - 1, d, 23, 59, 59, 999).getTime() : new Date(y, m - 1, d).getTime();
+      };
+      from.onchange = to.onchange = () => set(i, { min: read(from, false), max: read(to, true) }, [from, to]);
+      if (dt.filters[i]) [from, to].forEach((x) => x.classList.add("on"));
+      return el("label", {}, c.l, el("div", { class: "dtrange" }, from, to));
+    }
+    if (c.t === "text") {
+      const counts = new Map();
+      for (const r of t.rows) counts.set(r[i] ?? "", (counts.get(r[i] ?? "") ?? 0) + 1);
+      if (counts.size <= 40) {
+        const sel = el("select", { "aria-label": c.l },
+          el("option", { value: "" }, "Alle"),
+          ...[...counts].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "de", { numeric: true }))
+            .map(([v, n], k) => el("option", { value: String(k + 1) }, `${v === "" ? "(leer)" : v} (${n})`)));
+        const values = [...counts.keys()].sort((a, b) => String(a).localeCompare(String(b), "de", { numeric: true }));
+        if (cur.eq != null) { sel.value = String(values.indexOf(cur.eq) + 1); sel.classList.add("on"); }
+        sel.onchange = () => set(i, { eq: sel.value ? values[Number(sel.value) - 1] : null }, [sel]);
+        return el("label", {}, c.l, sel);
+      }
+    }
+    // Viele verschiedene Texte (Titel, CPU-Listen): "enthält"
+    const inp = el("input", { type: "search", placeholder: "enthält …", "aria-label": `${c.l} enthält`, value: cur.has ?? "" });
+    let timer;
+    inp.oninput = () => { clearTimeout(timer); timer = setTimeout(() => set(i, { has: inp.value.trim() }, [inp]), 200); };
+    if (cur.has) inp.classList.add("on");
+    return el("label", {}, c.l, inp);
+  });
+  document.getElementById("dtFilterGrid").replaceChildren(...fields);
+  const n = Object.keys(dt.filters).length;
+  document.getElementById("dtFilterSum").textContent = n ? `Filter (${n} aktiv)` : "Filter";
+}
+
+function dtRenderTable() {
+  const d = dt.data, t = dtTable();
   if (!t) return;
   document.getElementById("dtNote").textContent = t.note ?? "";
   document.getElementById("dtHead").replaceChildren(el("tr", {}, ...t.columns.map((c, i) => {
@@ -1288,7 +1376,7 @@ function dtRender() {
     th.onclick = () => {
       // Zahlen und Daten zuerst absteigend (größte/neueste oben), Text aufsteigend
       if (dt.sort === i) dt.dir = -dt.dir; else { dt.sort = i; dt.dir = ["text", "link"].includes(c.t) ? 1 : -1; }
-      dtRender();
+      dtRenderTable();
     };
     return th;
   })));
@@ -1322,8 +1410,9 @@ async function dtLoad() {
   dtRender();
 }
 let dtTimer;
-document.getElementById("dtSearch").oninput = (e) => { clearTimeout(dtTimer); dtTimer = setTimeout(() => { dt.q = e.target.value; dt.limit = 300; dtRender(); }, 200); };
-document.getElementById("dtMore").onclick = () => { dt.limit += 500; dtRender(); };
+document.getElementById("dtSearch").oninput = (e) => { clearTimeout(dtTimer); dtTimer = setTimeout(() => { dt.q = e.target.value; dt.limit = 300; dtRenderTable(); }, 200); };
+document.getElementById("dtMore").onclick = () => { dt.limit += 500; dtRenderTable(); };
+document.getElementById("dtReset").onclick = () => { dt.filters = {}; dt.limit = 300; dtFilters(); dtRenderTable(); };
 document.getElementById("dtCsv").onclick = () => {
   const t = dtTable();
   if (!t) return;
