@@ -93,7 +93,10 @@ if (markets) {
     const s = config.searches.find((x) => !rejectReason(i, x));
     const m = s && markets[s.label];
     if (!m) continue;
-    const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin.price : m.nextBin?.price;
+    // Verkaufspreis: günstigster anderer Sofortkauf, aber höchstens der Median echter Verkäufe –
+    // ein einzelnes überteuertes Angebot soll keinen Gewinn vortäuschen.
+    let resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin.price : m.nextBin?.price;
+    if (m.soldCount >= (r.soldCapMin ?? 2) && m.soldMedian && (!resale || m.soldMedian < resale)) resale = m.soldMedian;
     if (!resale) continue;
     const total = totalPrice(i);
     const fee = notify.business ? resale * r.feeRate : 0;

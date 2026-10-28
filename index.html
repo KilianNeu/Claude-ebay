@@ -516,7 +516,7 @@ function renderGrid() {
   let list = state.deals.filter((d) =>
     (state.search === "all" || d.search === state.search) &&
     (state.type === "all" || (state.type === "offer" ? d.bestOffer : (state.type === "auction") === d.auction)) &&
-    (!d.endsAt || new Date(d.endsAt) > Date.now()));
+    (!d.endsAt || new Date(d.endsAt) > Date.now()) && profitable(d));
   const by = {
     discount: (a, b) => (b.discount ?? -1) - (a.discount ?? -1),
     price: (a, b) => a.total - b.total,
@@ -577,6 +577,11 @@ function profitOf(d) {
   if (bin) [resale, basis] = [bin.price, self ? "zweitgünstigster Sofortkauf" : "günstigster Sofortkauf"];
   else if (m?.soldCount >= 3) [resale, basis] = [m.soldMedian, `Median von ${m.soldCount} Verkäufen`];
   else [resale, basis] = [d.reference, "Marktpreis-Schätzung"];
+  // Höchstens so viel, wie tatsächlich bezahlt wurde: ein einzelnes überteuertes Sofortkauf-Angebot
+  // soll keinen Gewinn vortäuschen.
+  if (m?.soldCount >= (state.resale.soldCapMin ?? 2) && m.soldMedian && (!resale || m.soldMedian < resale)) {
+    [resale, basis] = [m.soldMedian, `Median von ${m.soldCount} Verkäufen, unter dem günstigsten Sofortkauf`];
+  }
   if (!resale) return null;
   const r = state.resale, fee = state.business ? resale * r.feeRate : 0;
   // Höchster Kaufpreis inkl. Versand, bei dem nach Kosten noch 10 % (mindestens 15 €) Gewinn bleiben.
@@ -662,11 +667,18 @@ function marketBlock(d) {
   return el("div", { class: "mk" }, ...rows);
 }
 
+// Ohne Gewinn beim Weiterverkauf kein Schnäppchen (Auktionen mit über 24 h Restzeit sind noch offen)
+function profitable(d) {
+  const p = profitOf(d);
+  return !p || p.longRunning || p.value > 0;
+}
+
 function renderChips(searches) {
   const chips = document.getElementById("chips");
   const counts = {};
-  for (const d of state.deals) counts[d.search] = (counts[d.search] ?? 0) + 1;
-  const all = [["all", `Alle (${state.deals.length})`], ...searches.map((s) => [s.label, `${s.label} (${counts[s.label] ?? 0})`])];
+  const shown = state.deals.filter(profitable);
+  for (const d of shown) counts[d.search] = (counts[d.search] ?? 0) + 1;
+  const all = [["all", `Alle (${shown.length})`], ...searches.map((s) => [s.label, `${s.label} (${counts[s.label] ?? 0})`])];
   chips.replaceChildren(...all.map(([key, text]) => {
     const b = el("button", { class: "chip", "aria-pressed": String(state.search === key) }, text);
     b.onclick = () => { state.search = key; renderChips(searches); renderGrid(); };
@@ -698,6 +710,7 @@ document.getElementById("business").checked = state.business;
 document.getElementById("business").onchange = (e) => {
   state.business = e.target.checked;
   try { localStorage.setItem("business", state.business ? "1" : "0"); } catch {}
+  renderChips(state.searches ?? []);
   renderGrid();
 };
 document.getElementById("linkform").onsubmit = (e) => {
@@ -910,14 +923,15 @@ async function load() {
   state.dealThreshold = data.dealThreshold ?? 0.85;
   if (data.resale) state.resale = data.resale;
   document.getElementById("status").textContent = data.updatedAt
-    ? `Stand: ${new Date(data.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · ${state.deals.length} Angebote`
+    ? `Stand: ${new Date(data.updatedAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · ${state.deals.filter(profitable).length} Angebote`
     : "Noch keine Daten.";
   if (data.errors?.length) {
     const n = document.getElementById("notice");
     n.hidden = false;
     n.append(el("strong", {}, "Hinweis: "), data.errors.join(" "));
   }
-  renderChips(data.searches ?? []);
+  state.searches = data.searches ?? [];
+  renderChips(state.searches);
   renderSearches(data.searches ?? [], data.markets);
   await loadStats(data.searches ?? []);
   renderGrid();

@@ -11,7 +11,8 @@
   "resale": {
     "shipping": 7,
     "packaging": 3,
-    "feeRate": 0.11
+    "feeRate": 0.11,
+    "soldCapMin": 2
   },
   "notify": {
     "minProfit": 30,

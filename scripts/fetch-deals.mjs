@@ -452,10 +452,12 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
 await mkdir(new URL("../data/", import.meta.url), { recursive: true });
 if (EBAY_CLIENT_ID && EBAY_CLIENT_SECRET) {
   await writeFile(historyFile, JSON.stringify(history));
-  // Marktwerte für den Schnellcheck: günstigster und zweitgünstigster Sofortkauf je Modell.
+  // Marktwerte für den Schnellcheck: günstigster und zweitgünstigster Sofortkauf je Modell, dazu der
+  // Verkaufs-Median als Obergrenze für den Verkaufspreis.
   const markets = Object.fromEntries(result.markets.map((m) => [m.label, {
     cheapestBin: m.cheapestBin ? { id: m.cheapestBin.id, price: m.cheapestBin.price } : null,
     nextBin: m.nextBin ? { price: m.nextBin.price } : null,
+    soldMedian: m.soldMedian ?? null, soldCount: m.soldCount ?? 0,
   }]));
   await writeFile(new URL("markets.json", historyFile instanceof URL ? historyFile : pathToFileURL(resolve(historyFile))), JSON.stringify({ updatedAt: result.updatedAt, markets }));
 }

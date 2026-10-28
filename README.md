@@ -151,3 +151,10 @@ Spaltenkopf, filterbar über alle Spalten, Export als CSV (Semikolon, deutsches 
 Die GPU-Historie wird bei jedem Lauf mit den aktuellen Filtern bereinigt (`stillMatches` in
 `scripts/lib.mjs`): Einträge aus der Zeit vor strengeren Filtern – etwa Modelleisenbahnen „Märklin 4080“
 als Verkauf einer RTX 4080 – fallen heraus und verfälschen den Verkaufs-Median nicht mehr.
+
+## Verkaufspreis für Gewinn und Maximalgebot (GPUs)
+
+Günstigster anderer Sofortkauf, aber höchstens der Median echter Verkäufe der letzten 30 Tage, sobald
+mindestens `resale.soldCapMin` (2) Verkäufe vorliegen. So täuscht ein einzelnes überteuertes Angebot keinen
+Gewinn vor. Angebote ohne Gewinn erscheinen nicht als Schnäppchen (Auktionen mit über 24 h Restzeit
+ausgenommen); der Schnellcheck rechnet genauso.
