@@ -23,10 +23,12 @@ const gpu = await read(join(dir, "history.json"));
 if (gpu) {
   const L = gpu.listings ?? {};
   const current = stillMatches;
+  // Verkauf je Angebot (Auktionsende mit Gebot oder verschwundener Sofortkauf), für die Angebotsliste
+  const saleOf = new Map((gpu.sold ?? []).map((x) => [x.id, x]));
 
   categories.push({ id: "gpu", label: "Grafikkarten", tables: [
     table("ended", "Beendete Auktionen", [
-      ["at", "Ende", "date"], ["model", "Modell", "text"], ["title", "Angebot", "link"], ["price", "Endpreis inkl. Versand", "eur"],
+      ["at", "Ende (Verkaufsdatum)", "date"], ["model", "Modell", "text"], ["title", "Angebot", "link"], ["price", "Endpreis inkl. Versand", "eur"],
       ["bids", "Gebote", "num"], ["result", "Ergebnis", "text"], ["first", "Erstes gesehenes Gebot", "eur"], ["created", "Eingestellt", "date"],
     ], (gpu.ended ?? []).filter((x) => current(x.model, x.title ?? L[x.id]?.title, x.price)).map((x) => {
       const l = L[x.id] ?? {};
@@ -34,16 +36,18 @@ if (gpu) {
         l.firstPrice ?? null, time(l.created)];
     }), "Endpreise per eBay-Abfrage nach Auktionsende (90 Tage)."),
     table("sold", "Verkäufe", [
-      ["at", "Datum", "date"], ["model", "Modell", "text"], ["kind", "Art", "text"], ["price", "Preis inkl. Versand", "eur"], ["title", "Angebot", "link"],
+      ["at", "Verkauft am", "date"], ["model", "Modell", "text"], ["kind", "Art", "text"], ["price", "Preis inkl. Versand", "eur"], ["title", "Angebot", "link"],
     ], (gpu.sold ?? []).filter((x) => current(x.model, L[x.id]?.title, x.price)).map((x) => [x.at, x.model, x.kind === "auction" ? "Auktion" : "Sofort-Kaufen (vermutlich verkauft)", x.price,
       [L[x.id]?.title ?? "ansehen", itemUrl(x.id)]]), "Auktionen mit Endpreis und verschwundene Sofort-Kaufen-Angebote (90 Tage)."),
     table("listings", "Beobachtete Angebote", [
       ["model", "Modell", "text"], ["title", "Angebot", "link"], ["format", "Format", "text"], ["price", "Letzter Preis", "eur"],
+      ["soldAt", "Verkauft am", "date"], ["soldPrice", "Verkaufspreis", "eur"],
       ["first", "Erster Preis", "eur"], ["drops", "Preissenkungen", "num"], ["bids", "Gebote", "num"], ["created", "Eingestellt", "date"],
       ["firstSeen", "Zuerst gesehen", "date"], ["lastSeen", "Zuletzt gesehen", "date"], ["endsAt", "Ende", "date"], ["status", "Status", "text"],
     ], Object.entries(L).filter(([, l]) => current(l.model, l.title, l.auction ? undefined : l.price)).map(([id, l]) => [l.model, [l.title ?? "ansehen", itemUrl(id)], l.auction ? "Auktion" : "Sofort-Kaufen", l.price ?? null,
+      saleOf.get(id)?.at ?? null, saleOf.get(id)?.price ?? null,
       l.firstPrice ?? null, l.drops ?? 0, l.auction ? l.bids ?? null : null, time(l.created), l.firstSeen ?? null, l.lastSeen ?? null, time(l.endsAt),
-      l.done ? "beendet" : l.lastSeen > now - 2 * 3.6e6 ? "aktiv" : "nicht mehr gesehen"]),
+      saleOf.has(id) ? "verkauft" : l.done ? "beendet" : l.lastSeen > now - 2 * 3.6e6 ? "aktiv" : "nicht mehr gesehen"]),
       "Alle Angebote, die die Filter bestanden haben (bis 14 Tage nach dem letzten Sehen)."),
   ] });
 }
@@ -62,7 +66,7 @@ if (mph || mp) {
     o.auction ? "Auktion" : "Sofort-Kaufen", o.price, o.value, o.discount, o.bids, time(o.endsAt), o.condition, o.seller]),
     "Aktueller Lauf: alle Mini-PCs, die die Filter bestanden haben."));
   if (mph) tables.push(table("ended", "Beendete Auktionen", [
-    ["at", "Ende", "date"], ["family", "Baureihe", "text"], ["title", "Angebot", "link"], ["cpu", "CPU", "text"], ["ram", "RAM (GB)", "num"],
+    ["at", "Ende (Verkaufsdatum)", "date"], ["family", "Baureihe", "text"], ["title", "Angebot", "link"], ["cpu", "CPU", "text"], ["ram", "RAM (GB)", "num"],
     ["ssd", "SSD (GB)", "num"], ["price", "Endpreis inkl. Versand", "eur"], ["bids", "Gebote", "num"], ["result", "Ergebnis", "text"],
     ["value", "Geschätzter Wert", "eur"], ["ratio", "Endpreis / Schätzung", "pct"],
   ], (mph.ended ?? []).map((x) => [x.at, x.family, [x.title ?? "ansehen", x.url], x.cpu, x.ram, x.ssd, x.price, x.bids, RESULT[x.result] ?? x.result,
@@ -92,7 +96,7 @@ if (rh || ram) {
   ], ram.offers.map((o) => [o.market, [o.title, o.url], o.modules, o.speed, o.auction ? "Auktion" : "Sofort-Kaufen", o.price, o.perGB, o.reference,
     o.discount, o.bids, time(o.endsAt), o.condition, o.seller]), "Aktueller Lauf: alle RAM-Angebote, die die Filter bestanden haben."));
   if (rh) tables.push(table("ended", "Beendete Auktionen", [
-    ["at", "Ende", "date"], ["market", "Markt", "text"], ["title", "Angebot", "link"], ["speed", "Takt (MHz)", "num"], ["price", "Endpreis inkl. Versand", "eur"],
+    ["at", "Ende (Verkaufsdatum)", "date"], ["market", "Markt", "text"], ["title", "Angebot", "link"], ["speed", "Takt (MHz)", "num"], ["price", "Endpreis inkl. Versand", "eur"],
     ["perGB", "Endpreis je GB", "eur"], ["bids", "Gebote", "num"], ["result", "Ergebnis", "text"],
   ], (rh.ended ?? []).map((x) => {
     const gb = Number(x.key?.match(/(\d+) GB/)?.[1]);

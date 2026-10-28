@@ -447,6 +447,11 @@
     <input class="dtsearch" id="dtSearch" type="search" placeholder="Filtern, z. B. 4070 oder verkauft" aria-label="Tabelle filtern">
     <button class="chip" id="dtCsv" type="button">CSV</button>
   </div>
+  <div class="controls">
+    <label class="sub" for="dtSortCol" style="margin:0">Sortieren nach</label>
+    <select id="dtSortCol" aria-label="Sortieren nach"></select>
+    <button class="chip" id="dtSortDir" type="button" aria-label="Sortierrichtung umkehren"></button>
+  </div>
   <details class="dtfilters" id="dtFilterBox">
     <summary id="dtFilterSum">Filter</summary>
     <div class="dtfgrid" id="dtFilterGrid"></div>
@@ -1363,6 +1368,8 @@ function dtFilters() {
     return el("label", {}, c.l, inp);
   });
   document.getElementById("dtFilterGrid").replaceChildren(...fields);
+  document.getElementById("dtSortCol").replaceChildren(el("option", { value: "" }, "ursprüngliche Reihenfolge"),
+    ...t.columns.map((c, i) => el("option", { value: String(i) }, c.l)));
   const n = Object.keys(dt.filters).length;
   document.getElementById("dtFilterSum").textContent = n ? `Filter (${n} aktiv)` : "Filter";
 }
@@ -1370,6 +1377,12 @@ function dtFilters() {
 function dtRenderTable() {
   const d = dt.data, t = dtTable();
   if (!t) return;
+  document.getElementById("dtSortCol").value = dt.sort == null ? "" : String(dt.sort);
+  const dirBtn = document.getElementById("dtSortDir");
+  const type = dt.sort == null ? null : t.columns[dt.sort].t;
+  dirBtn.hidden = dt.sort == null;
+  dirBtn.textContent = type === "date" ? (dt.dir > 0 ? "▲ älteste zuerst" : "▼ neueste zuerst")
+    : ["text", "link"].includes(type) ? (dt.dir > 0 ? "▲ A–Z" : "▼ Z–A") : (dt.dir > 0 ? "▲ kleinste zuerst" : "▼ größte zuerst");
   document.getElementById("dtNote").textContent = t.note ?? "";
   document.getElementById("dtHead").replaceChildren(el("tr", {}, ...t.columns.map((c, i) => {
     const th = el("th", dt.sort === i ? { "aria-sort": dt.dir > 0 ? "ascending" : "descending" } : {}, c.l, dt.sort === i ? (dt.dir > 0 ? " ▲" : " ▼") : "");
@@ -1412,6 +1425,13 @@ async function dtLoad() {
 let dtTimer;
 document.getElementById("dtSearch").oninput = (e) => { clearTimeout(dtTimer); dtTimer = setTimeout(() => { dt.q = e.target.value; dt.limit = 300; dtRenderTable(); }, 200); };
 document.getElementById("dtMore").onclick = () => { dt.limit += 500; dtRenderTable(); };
+document.getElementById("dtSortCol").onchange = (e) => {
+  const t = dtTable();
+  if (e.target.value === "") dt.sort = null;
+  else { dt.sort = Number(e.target.value); dt.dir = ["text", "link"].includes(t.columns[dt.sort].t) ? 1 : -1; }
+  dtRenderTable();
+};
+document.getElementById("dtSortDir").onclick = () => { dt.dir = -dt.dir; dtRenderTable(); };
 document.getElementById("dtReset").onclick = () => { dt.filters = {}; dt.limit = 300; dtFilters(); dtRenderTable(); };
 document.getElementById("dtCsv").onclick = () => {
   const t = dtTable();
