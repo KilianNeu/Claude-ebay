@@ -155,7 +155,11 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
     if (!(o.total <= ref * config.dealThreshold && o.total >= ref * config.floorRatio)) continue;
     const i = o.item;
     // Weiterverkauf zum günstigsten anderen Sofortkauf; ohne Gewinn kein Schnäppchen zum Handeln
-    const resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin : m.nextBin;
+    let resale = m.cheapestBin && m.cheapestBin.id !== i.itemId ? m.cheapestBin : m.nextBin;
+    // Höchstens der Median echter Auktionsverkäufe – RAM-Auktionen enden meist unter dem günstigsten Sofortkauf
+    if (m.soldCount >= (config.resale.soldCapMin ?? 2) && m.soldMedian && (!resale || m.soldMedian < resale.price)) {
+      resale = { price: m.soldMedian, url: null, basis: `Median von ${m.soldCount} Auktionsverkäufen` };
+    }
     if (!resale || resale.price - r.shipping - r.packaging - o.total <= 0) continue;
     result.deals.push({
       id: i.itemId, title: i.title, url: i.itemWebUrl, image: i.image?.imageUrl ?? i.thumbnailImages?.[0]?.imageUrl ?? null,
@@ -165,7 +169,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
       seller: i.seller ? { score: i.seller.feedbackScore ?? null, positive: i.seller.feedbackPercentage ?? null } : null,
       price: round2(o.total), shipping: round2(num(i.shippingOptions?.[0]?.shippingCost)), perGB: round2(o.total / o.ram.total), reference: ref, basis: m.basis,
       discount: Math.round((1 - o.total / ref) * 100),
-      resale: resale ? { price: resale.price, url: resale.url } : null,
+      resale: resale ? { price: resale.price, url: resale.url, basis: resale.basis ?? null } : null,
       profit: resale ? round(resale.price - r.shipping - r.packaging - o.total) : null,
     });
   }
@@ -187,7 +191,7 @@ if (!EBAY_CLIENT_ID || !EBAY_CLIENT_SECRET) {
   // Für den Schnellcheck: Verkaufspreise je Markt (neben der Historie im Branch data)
   await writeFile(new URL("ram-markets.json", pathToFileURL(historyFile)), JSON.stringify({ updatedAt: result.updatedAt,
     markets: Object.fromEntries(result.markets.map((m) => [m.key, { offers: m.offers, cheapestBin: m.cheapestBin, nextBin: m.nextBin,
-      referenceUsed: m.referenceUsed, referenceNew: m.referenceNew }])) }));
+      referenceUsed: m.referenceUsed, referenceNew: m.referenceNew, soldMedian: m.soldMedian, soldCount: m.soldCount }])) }));
   await writeFile(statsFile, JSON.stringify({ updatedAt: result.updatedAt, ended: hist.ended, series: hist.snapshots }));
   console.log(`Statistik: ${Object.keys(hist.auctions).length} Auktionen beobachtet, ${settled} beendet geprüft (${sold} verkauft), ${hist.ended.length} beendete in 30 Tagen.`);
   console.log(`${result.markets.length} Märkte, ${result.deals.length} Schnäppchen.`);

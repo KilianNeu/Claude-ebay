@@ -11,11 +11,14 @@
   "minSold": 5,
   "resale": {
     "shipping": 5,
-    "packaging": 1
+    "packaging": 1,
+    "soldCapMin": 2
   },
   "notify": {
-    "minProfit": 15,
-    "minProfitPercent": 10,
+    "minProfit": 25,
+    "minProfitPercent": 20,
+    "minOffers": 5,
+    "maxPerDay": 4,
     "maxAgeMinutes": 90
   },
   "exclude": [

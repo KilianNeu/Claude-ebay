@@ -165,3 +165,13 @@ Workflow „Angebot prüfen“ (Actions → Angebot prüfen → Run workflow) mi
 wie `ebay.io/m/…`: `scripts/check-item.mjs` ruft den Artikel ab, erkennt GPU-Modell bzw. RAM-Markt und
 vergleicht mit aktuellen Sofortkäufen und den gesammelten Verkäufen (Gewinn, lohnender Höchstpreis).
 Ergebnis in der Zusammenfassung des Laufs.
+
+## Meldungen: Prüfung und Grenzen
+
+Vor jeder ntfy-Meldung ruft der Schnellcheck das vollständige Angebot ab und verwirft es bei
+Defekt-Hinweisen in der Zustandsbeschreibung („Artefakte“, „kein Bild“, „Memtest-Fehler“ …) oder wenn es
+ausverkauft ist; bei RAM zusätzlich bei Server-RAM laut Merkmalen/Teilenummer und wenn Kapazität,
+Formfaktor oder DDR-Typ in den Merkmalen nicht zum Titel passen. RAM-Meldungen sind strenger
+(`ram.json` → `notify`): mindestens 25 € und 20 % Gewinn, mindestens 5 Vergleichsangebote,
+Wiederverkauf höchstens zum Median echter Auktionsverkäufe, höchstens 4 Meldungen in 24 Stunden
+(die besten zuerst) und mit normaler statt hoher Priorität.

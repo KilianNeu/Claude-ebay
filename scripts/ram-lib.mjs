@@ -49,12 +49,18 @@ export function trusted(i) {
   return true;
 }
 
+// Server-RAM (ECC/Registered/LRDIMM) läuft nur in Server-/Workstation-Boards – eigener Markt, hier ausgeschlossen.
+// Erkennung auch über Teilenummern: SK hynix HMA…GR…/HMA…GS… nur GR = Registered, Samsung M393/M386, PC4-…-R/-L
+export const isServerRam = (text) =>
+  /\becc\b|registered|\brdimm\b|\blrdimm\b|\breg\b|server|\bhma\w{2}gr|\bm3(93|86)|pc4-\d{4}[a-z]{0,2}-[rl]\b/i.test(text);
+
 export function rejectReason(i) {
   if (i.conditionId === "7000") return "Zustand: defekt";
   if (!domestic(i)) return "nicht auf ebay.de in Euro oder Standort nicht Deutschland";
   if (!trusted(i)) return `Verkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen`;
   const term = excludedTerm(i.title ?? "");
   if (term) return `Ausschlusswort „${term}“`;
+  if (isServerRam(i.title ?? "")) return "Server-RAM (Teilenummer)";
   const r = parseRam(i.title ?? "");
   if (!r) return "DDR-Generation oder Größe nicht im Titel";
   if (r.total < config.minCapacity) return `kleiner als ${config.minCapacity} GB`;
