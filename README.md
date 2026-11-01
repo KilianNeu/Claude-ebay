@@ -158,3 +158,10 @@ Günstigster anderer Sofortkauf, aber höchstens der Median echter Verkäufe der
 mindestens `resale.soldCapMin` (2) Verkäufe vorliegen. So täuscht ein einzelnes überteuertes Angebot keinen
 Gewinn vor. Angebote ohne Gewinn erscheinen nicht als Schnäppchen (Auktionen mit über 24 h Restzeit
 ausgenommen); der Schnellcheck rechnet genauso.
+
+## Einzelnes Angebot prüfen
+
+Workflow „Angebot prüfen“ (Actions → Angebot prüfen → Run workflow) mit einem eBay-Link, auch Kurzlinks
+wie `ebay.io/m/…`: `scripts/check-item.mjs` ruft den Artikel ab, erkennt GPU-Modell bzw. RAM-Markt und
+vergleicht mit aktuellen Sofortkäufen und den gesammelten Verkäufen (Gewinn, lohnender Höchstpreis).
+Ergebnis in der Zusammenfassung des Laufs.

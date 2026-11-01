@@ -1,0 +1,35 @@
+name: Angebot prüfen
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "eBay-Link (auch Kurzlink ebay.io/m/…)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verkaufsdaten laden
+        run: |
+          mkdir -p history
+          if git fetch --depth=1 origin data; then
+            for f in history.json ram-history.json; do git show FETCH_HEAD:$f > history/$f || true; done
+          fi
+      - name: Angebot prüfen
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          ITEM_URL: ${{ inputs.url }}
+          HISTORY_DIR: history
+        run: node scripts/check-item.mjs
