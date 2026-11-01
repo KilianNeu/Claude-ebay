@@ -72,10 +72,14 @@ if (gpu) {
   const h = await read("history.json");
   soldPrices = (h?.sold ?? []).filter((x) => x.model === gpu.label && x.at > now - 30 * 864e5);
 } else if (ram) {
-  label = marketKey(ram);
+  // Server-RAM (ECC/Registered) ist ein eigener Markt: läuft nur in Server-/Workstation-Boards.
+  // Erkennung über Titel, Merkmale oder Teilenummer (SK hynix …GR7…/…GR8…, Samsung M393/M386, Micron …ADF/…PDF … RDIMM)
+  const isServer = (t) => /\becc\b|registered|\brdimm\b|\blrdimm\b|\breg\b|server|\bhma\w{2}gr|\bm3(93|86)|pc4-\d{4}[vtp]-r/i.test(t);
+  const server = isServer(`${item.title} ${Object.values(aspects).join(" ")}`);
+  label = `${marketKey(ram)}${server ? " (Server-RAM, ECC/Registered)" : ""}`;
   const q = `${ram.ddr} ${ram.form === "sodimm" ? "sodimm" : "ram"} ${ram.total}gb`;
   comps = await search(token, { q, category_ids: ramConfig.categoryIds, filter: `${where},buyingOptions:{FIXED_PRICE}`, sort: "price", limit: "100" });
-  comps = comps.filter((i) => { const r = parseRam(i.title ?? ""); return r && marketKey(r) === label && domestic(i) && trusted(i); });
+  comps = comps.filter((i) => { const r = parseRam(i.title ?? ""); return r && marketKey(r) === marketKey(ram) && isServer(i.title ?? "") === server && domestic(i) && trusted(i); });
   const h = await read("ram-history.json");
   soldPrices = (h?.ended ?? []).filter((x) => x.key === label && x.result === "sold").map((x) => ({ price: x.price, kind: "auction", at: x.at }));
 } else {
@@ -87,6 +91,13 @@ if (gpu) {
   comps = comps.filter((i) => domestic(i) && trusted(i));
 }
 comps = comps.filter((i) => i.legacyItemId !== legacyId && !i.itemId?.includes(`|${legacyId}|`));
+// Ausreißer nach unten (unter 50 % des Medians: Tippfehler, Einzelmodul, Lockangebot) nicht als Vergleich
+{
+  const mid = median(comps.map(totalPrice).filter(Number.isFinite));
+  const low = comps.filter((i) => totalPrice(i) < mid * 0.5);
+  if (low.length) console.log(`Ausreißer ignoriert: ${low.map((i) => `${totalPrice(i)} € ${i.title}`).join("; ")}`);
+  comps = comps.filter((i) => !(totalPrice(i) < mid * 0.5));
+}
 const prices = comps.map(totalPrice).filter(Number.isFinite).sort((a, b) => a - b);
 
 out(`### Vergleich: ${label} (${comps.length} Sofortkauf-Angebote aus Deutschland)`);
