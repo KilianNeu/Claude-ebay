@@ -8,7 +8,7 @@
 // NOTIFIED_FILE (bereits gemeldete Angebote), USAGE_FILE (API-Verbrauch aus dem stündlichen Lauf).
 
 import { readFile, writeFile } from "node:fs/promises";
-import { config, getToken, search, getItem, totalPrice, rejectReason } from "./lib.mjs";
+import { config, getToken, search, getItem, totalPrice, rejectReason, median, searchQuery } from "./lib.mjs";
 import { ramConfig, parseRam, marketKey, isServerRam, rejectReason as ramRejectReason } from "./ram-lib.mjs";
 
 const now = Date.now();
@@ -106,8 +106,8 @@ if (markets) {
     const profit = resale - fee - r.shipping - r.packaging - total;
     // Mindestgewinn absolut und relativ zum Kaufpreis: 100 € bei einer 5.900-€-Karte sind kein Schnäppchen.
     const required = Math.max(notify.minProfit ?? 30, total * (notify.minProfitPercent ?? 10) / 100);
-    if (profit >= required) hits.push({ i, cat: "gpu", label: s.label, total, resale, profit, required,
-      basis: resale === m.soldMedian ? "Verkaufs-Median" : "günstigster Sofortkauf" });
+    if (profit >= required) hits.push({ i, cat: "gpu", label: s.label, total, resale, profit, required, s, m,
+      costs: fee + r.shipping + r.packaging, basis: resale === m.soldMedian ? "Verkaufs-Median" : "günstigster Sofortkauf" });
   }
   console.log(`Grafikkarten: ${items.size} Angebote geprüft, ${freshCount} neu, ${hits.length} lohnend.`);
 }
@@ -133,7 +133,8 @@ if (ramMarkets) {
     const total = totalPrice(i);
     const profit = resale - rr.shipping - rr.packaging - total;
     const required = Math.max(rn.minProfit ?? 25, total * (rn.minProfitPercent ?? 20) / 100);
-    if (profit >= required) ramHits.push({ i, cat: "ram", label: key, total, resale, profit, required, basis });
+    if (profit >= required) ramHits.push({ i, cat: "ram", label: key, total, resale, profit, required, basis, m,
+      ram: parseRam(i.title), costs: rr.shipping + rr.packaging });
   }
   // Höchstens maxPerDay RAM-Meldungen in 24 Stunden, die besten zuerst
   const sentToday = Object.values(notified).filter((v) => v?.cat === "ram" && !v.skipped && notedAt(v) > now - DAY).length;
@@ -167,17 +168,51 @@ async function verify(hit) {
   return null;
 }
 
+// Zweitprüfung: frische Suche nach vergleichbaren Angeboten (Marktdaten sind bis zu einer Stunde alt und
+// können dünn sein). Ausreißer nach unten fallen heraus; gemeldet wird nur, wenn der Gewinn auch gegen den
+// günstigsten aktuellen Vergleich und den Verkaufs-Median reicht. Passt die Rechnung, ersetzt sie die alte.
+async function liveCheck(hit) {
+  const { i, cat, m, total, required, costs } = hit;
+  const where = `priceCurrency:EUR,itemLocationCountry:DE,conditionIds:{${config.conditionIds}},buyingOptions:{FIXED_PRICE}`;
+  let comps;
+  if (cat === "gpu") {
+    comps = (await search(token, { q: searchQuery(hit.s), filter: where, sort: "price", limit: "50" })).filter((x) => !rejectReason(x, hit.s));
+  } else {
+    const r = hit.ram;
+    comps = (await search(token, { q: `${r.ddr} ${r.form === "sodimm" ? "sodimm" : "ram"} ${r.total}gb`, category_ids: ramConfig.categoryIds, filter: where, sort: "price", limit: "50" }))
+      .filter((x) => !ramRejectReason(x) && marketKey(parseRam(x.title)) === hit.label);
+  }
+  comps = comps.filter((x) => x.itemId !== i.itemId && x.seller?.username !== i.seller?.username); // eigene weitere Angebote zählen nicht
+  const prices = comps.map(totalPrice).filter(Number.isFinite).sort((a, b) => a - b);
+  const mid = median(prices);
+  const clean = prices.filter((p) => p >= mid * 0.5);
+  const minComps = cat === "ram" ? ramConfig.notify?.minOffers ?? 5 : 3;
+  if (clean.length < minComps) return { problem: `Zweitprüfung: nur ${clean.length} vergleichbare Angebote` };
+  let resale = clean[0], basis = `günstigstes von ${clean.length} aktuellen Vergleichsangeboten`;
+  const capMin = (cat === "ram" ? ramConfig.resale.soldCapMin : config.resale.soldCapMin) ?? 2;
+  if (m.soldCount >= capMin && m.soldMedian && m.soldMedian < resale) [resale, basis] = [m.soldMedian, `Median von ${m.soldCount} Verkäufen`];
+  const profit = resale - costs - total;
+  if (profit < required) return { problem: `Zweitprüfung: Wiederverkauf nur ca. ${Math.round(resale)} € (${basis}), Gewinn ${Math.round(profit)} €` };
+  return { resale, basis, profit };
+}
+
 const euro = (v) => `${Math.round(v)} €`;
 for (const hit of hits.sort((a, b) => b.profit - a.profit)) {
-  const { i, cat, label, total, resale, profit, required, basis } = hit;
+  const { i, cat, label, total, required } = hit;
   // Tageslimit erst nach der Prüfung anrechnen; was nicht mehr passt, bleibt unmarkiert
   if (cat === "ram" && ramRoom <= 0) { console.log(`  Tageslimit erreicht, nicht gemeldet: ${label} ${euro(total)} – ${i.title}`); continue; }
-  const problem = await verify(hit);
+  let problem = await verify(hit);
+  if (!problem) {
+    const live = await liveCheck(hit);
+    problem = live.problem;
+    if (!problem) Object.assign(hit, { resale: live.resale, basis: live.basis, profit: live.profit });
+  }
   if (problem) {
     console.log(`  verworfen nach Prüfung (${problem}): ${label} ${euro(total)} – ${i.title}`);
     notified[i.itemId] = { t: now, cat, skipped: true }; // nicht bei jedem Lauf erneut prüfen
     continue;
   }
+  const { resale, profit, basis } = hit;
   const message = `${i.title}\n${euro(total)} inkl. Versand · Wiederverkauf ca. ${euro(resale)} (${basis})`
     + ` · Gewinn ${Math.round(profit / total * 100)} %`
     + `\nVerkäufer: ${i.seller?.feedbackScore ?? "?"} Bewertungen · Angebot geprüft`;

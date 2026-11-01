@@ -175,3 +175,7 @@ Formfaktor oder DDR-Typ in den Merkmalen nicht zum Titel passen. RAM-Meldungen s
 (`ram.json` → `notify`): mindestens 25 € und 20 % Gewinn, mindestens 5 Vergleichsangebote,
 Wiederverkauf höchstens zum Median echter Auktionsverkäufe, höchstens 4 Meldungen in 24 Stunden
 (die besten zuerst) und mit normaler statt hoher Priorität.
+Danach folgt eine Zweitprüfung mit Live-Vergleich: frische Suche nach vergleichbaren Sofortkäufen
+(gleiches Modell bzw. gleicher RAM-Markt, Server/Desktop getrennt, ohne weitere Angebote desselben
+Verkäufers, Ausreißer unter 50 % des Medians ignoriert). Gemeldet wird nur, wenn genug
+Vergleichsangebote da sind und der Gewinn auch gegen das günstigste davon und den Verkaufs-Median reicht.
